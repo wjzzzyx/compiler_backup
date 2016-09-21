@@ -76,6 +76,8 @@ of		(?i:of)
 not		(?i:not)
 isvoid		(?i:isvoid)
 let		(?i:let)
+true		(?i:(?-i:t)rue)
+false		(?i:(?-i:f)alse)
 
 typeid		[A-Z]({letter}|{digit}|_)*
 objectid	[a-z]({letter}|{digit}|_)*
@@ -118,6 +120,7 @@ objectid	[a-z]({letter}|{digit}|_)*
 			    BEGIN(INITIAL);
 			    return(ERROR);
 			}
+--.*			{}
 
  /* string */
 \"			{
@@ -139,9 +142,36 @@ objectid	[a-z]({letter}|{digit}|_)*
 			    else
 			        *(string_buf_ptr++) = *(yytext + 1);
 			}
+<STRING>\\[b]		{
+			    if(string_buf_ptr >= string_buf + MAX_STR_CONST){
+			        cool_yylval.error_msg = "Full buffer!";
+			        BEGIN(INITIAL);
+			        return(ERROR);
+			    }
+			    else
+			        *(string_buf_ptr++) = '\b';
+			}
+<STRING>\\[t]		{
+			    if(string_buf_ptr >= string_buf + MAX_STR_CONST){
+			        cool_yylval.error_msg = "Full buffer!";
+			        BEGIN(INITIAL);
+			        return(ERROR);
+			    }
+			    else
+			        *(string_buf_ptr++) = '\t';
+			}
+<STRING>\\[f]		{
+			    if(string_buf_ptr >= string_buf + MAX_STR_CONST){
+			        cool_yylval.error_msg = "Full buffer!";
+			        BEGIN(INITIAL);
+			        return(ERROR);
+			    }
+			    else
+			        *(string_buf_ptr++) = '\f';
+			}
 <STRING>\n		{
 			    curr_lineno++;
-			    cool_yylval.error_msg = "Unclosed string!";
+			    cool_yylval.error_msg = "Unterminated string constant";
 			    BEGIN(INITIAL);
 			    return(ERROR);
 			}
