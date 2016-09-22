@@ -35,14 +35,13 @@ char string_buf[MAX_STR_CONST]; /* to assemble string constants */
 char *string_buf_ptr;
 
 extern int curr_lineno;
-
 extern YYSTYPE cool_yylval;
 
-/*
- *  Add Your own definitions here
- */
+
+/* Add Your own definitions here */
 int comment_depth = 0;
 
+int string_insert(int);
 %}
 
 %option noyywrap
@@ -100,7 +99,7 @@ objectid	[a-z]({letter}|{digit}|_)*
 
  /* comment */
 "*)"			{
-			    cool_yylval.error_msg = "Unmatched comment terminator!";
+			    cool_yylval.error_msg = "Unmatched *)";
 			    return(ERROR);
 			}
 "(*"			{
@@ -111,13 +110,13 @@ objectid	[a-z]({letter}|{digit}|_)*
 <COMMENT>"*)"		{
 			    comment_depth -= 1;
 			    if(comment_depth == 0)
-		    	    BEGIN(INITIAL);
+		    	        BEGIN(INITIAL);
 			}
 <COMMENT>\n		{curr_lineno++;}
 <COMMENT>.		{}
 <COMMENT><<EOF>>	{
-			    cool_yylval.error_msg = "Unterminated comment!";
 			    BEGIN(INITIAL);
+			    cool_yylval.error_msg = "EOF in comment";
 			    return(ERROR);
 			}
 --.*			{}
@@ -129,45 +128,10 @@ objectid	[a-z]({letter}|{digit}|_)*
 			}
 <STRING>\"		{
 			    BEGIN(INITIAL);
+			    *string_buf_ptr = '\0';
 			    cool_yylval.symbol = stringtable.add_string(string_buf);
 			    string_buf_ptr = NULL;
 			    return(STR_CONST);
-			}
-<STRING>\\[^btnf]	{
-			    if(string_buf_ptr >= string_buf + MAX_STR_CONST){
-			        cool_yylval.error_msg = "Full buffer!";
-			        BEGIN(INITIAL);
-			        return(ERROR);
-			    }
-			    else
-			        *(string_buf_ptr++) = *(yytext + 1);
-			}
-<STRING>\\[b]		{
-			    if(string_buf_ptr >= string_buf + MAX_STR_CONST){
-			        cool_yylval.error_msg = "Full buffer!";
-			        BEGIN(INITIAL);
-			        return(ERROR);
-			    }
-			    else
-			        *(string_buf_ptr++) = '\b';
-			}
-<STRING>\\[t]		{
-			    if(string_buf_ptr >= string_buf + MAX_STR_CONST){
-			        cool_yylval.error_msg = "Full buffer!";
-			        BEGIN(INITIAL);
-			        return(ERROR);
-			    }
-			    else
-			        *(string_buf_ptr++) = '\t';
-			}
-<STRING>\\[f]		{
-			    if(string_buf_ptr >= string_buf + MAX_STR_CONST){
-			        cool_yylval.error_msg = "Full buffer!";
-			        BEGIN(INITIAL);
-			        return(ERROR);
-			    }
-			    else
-			        *(string_buf_ptr++) = '\f';
 			}
 <STRING>\n		{
 			    curr_lineno++;
@@ -175,33 +139,62 @@ objectid	[a-z]({letter}|{digit}|_)*
 			    BEGIN(INITIAL);
 			    return(ERROR);
 			}
-<STRING>\\[n]		{
-			    if(string_buf_ptr >= string_buf + MAX_STR_CONST){
-			        cool_yylval.error_msg = "Full buffer!";
+<STRING>\\[^btnf]	{
+			    if(yytext[1] == '\n')
+			        curr_lineno++;
+			    if(string_insert(1) != 0){
 			        BEGIN(INITIAL);
+			        cool_yylval.error_msg = "String constant too long";
 			        return(ERROR);
 			    }
-			    else
-			        *(string_buf_ptr++) = '\n';
 			}
-<STRING>[\\\n]		{curr_lineno++;}
+<STRING>\\[b]		{
+			    yytext[0] = '\b';
+			    if(string_insert(0) != 0){
+			        BEGIN(INITIAL);
+			        cool_yylval.error_msg = "String constant too long";
+			        return(ERROR);
+			    }
+			}
+<STRING>\\[t]		{
+			    yytext[0] = '\t';
+			    if(string_insert(0) != 0){
+			        BEGIN(INITIAL);
+			        cool_yylval.error_msg = "String constant too long";
+			        return(ERROR);
+			    }
+			}
+<STRING>\\[f]		{
+			    yytext[0] = '\f';
+			    if(string_insert(0) != 0){
+			        BEGIN(INITIAL);
+			        cool_yylval.error_msg = "String constant too long";
+			        return(ERROR);
+			    }
+			}
+<STRING>\\[n]		{
+			    yytext[0] = '\n';
+			    if(string_insert(0) != 0){
+			        BEGIN(INITIAL);
+			        cool_yylval.error_msg = "String constant too long";
+			        return(ERROR);
+			    }
+			}
 <STRING><<EOF>>		{
-			    cool_yylval.error_msg = "Unterminated string!";
+			    cool_yylval.error_msg = "EOF in string constant";
 			    BEGIN(INITIAL);
 			    return(ERROR);
 			}
 <STRING>\0		{
-			    cool_yylval.error_msg = "Invalid character in string!";
+			    cool_yylval.error_msg = "String contains null character";
 			    return(ERROR);
 			}
 <STRING>.		{
-			    if(string_buf_ptr >= string_buf + MAX_STR_CONST){
-			        cool_yylval.error_msg = "Full buffer!";
+			    if(string_insert(0) != 0){
 			        BEGIN(INITIAL);
+			        cool_yylval.error_msg = "String constant too long";
 			        return(ERROR);
 			    }
-			    else
-			        *string_buf_ptr++ = *yytext;
 			}
 
  /* white space*/
@@ -226,9 +219,9 @@ objectid	[a-z]({letter}|{digit}|_)*
 {not}		{return(NOT);}
 {isvoid}	{return(ISVOID);}
 {let}		{return(LET);}
-true		{cool_yylval.boolean = true;
+{true}		{cool_yylval.boolean = true;
 		return(BOOL_CONST);}
-false		{cool_yylval.boolean = false;
+{false}		{cool_yylval.boolean = false;
 		return(BOOL_CONST);}
 
  /* character symbols */
@@ -272,3 +265,17 @@ false		{cool_yylval.boolean = false;
 		    return(ERROR);
 		}
 %%
+
+int string_insert(int i){
+    if(string_buf_ptr >= string_buf + MAX_STR_CONST - 1){
+        int c;
+        for(c = yyinput(); c != EOF && c != '"'; c = yyinput())
+            ;
+        return 1;
+    }
+    else{
+        *string_buf_ptr++ = yytext[i];
+        return 0;
+    }
+}
+
