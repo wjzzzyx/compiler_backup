@@ -39,9 +39,10 @@ extern YYSTYPE cool_yylval;
 
 
 /* Add Your own definitions here */
-int comment_depth = 0;
-
-int string_insert(int);
+int comment_depth = 0;    /* This var is used to count the depth of nested comments */
+int string_error = 0;    /* This var shows whether a string contains invalid character */
+int string_too_long = 0;    /* This var shows whether a string is too long */
+int string_insert(char);    /* This function is used to insert a char to the string_buf */
 %}
 
 %option noyywrap
@@ -98,6 +99,7 @@ objectid	[a-z]({letter}|{digit}|_)*
   */
 
  /* comment */
+ /* if "*)" is met out of the comment mode */
 "*)"			{
 			    cool_yylval.error_msg = "Unmatched *)";
 			    return(ERROR);
@@ -124,58 +126,61 @@ objectid	[a-z]({letter}|{digit}|_)*
  /* string */
 \"			{
 			    BEGIN(STRING);
+			    string_error = 0;
+			    string_too_long = 0;
 			    string_buf_ptr = string_buf;
 			}
 <STRING>\"		{
 			    BEGIN(INITIAL);
-			    *string_buf_ptr = '\0';
-			    cool_yylval.symbol = stringtable.add_string(string_buf);
-			    string_buf_ptr = NULL;
-			    return(STR_CONST);
+			    if(!string_error && !string_too_long){
+			        *string_buf_ptr = '\0';    /* indicate end of string */
+			        cool_yylval.symbol = stringtable.add_string(string_buf);    /* add a string to the string_tab */
+			        string_buf_ptr = NULL;
+			        return(STR_CONST);
+			    }
 			}
+ /*if an unescaped \n is met in a string, return ERROR and resume lexer from the next line */
 <STRING>\n		{
 			    curr_lineno++;
 			    cool_yylval.error_msg = "Unterminated string constant";
 			    BEGIN(INITIAL);
 			    return(ERROR);
 			}
+ /* "\c" is translated into "c", except for "\b" "\t" "\n" and "\f" */
 <STRING>\\[^btnf]	{
-			    if(yytext[1] == '\n')
+			    if(yytext[1] == '\n')    /* if an escaped \n is met in a string, add the line number and continue */
 			        curr_lineno++;
-			    if(string_insert(1) != 0){
-			        BEGIN(INITIAL);
+			    if(string_insert(yytext[1]) != 0 && !string_too_long){
+			        string_too_long = 1;
 			        cool_yylval.error_msg = "String constant too long";
 			        return(ERROR);
 			    }
 			}
+ /* handle "\b" "\t" "\f" and "\n" specifically */
 <STRING>\\[b]		{
-			    yytext[0] = '\b';
-			    if(string_insert(0) != 0){
-			        BEGIN(INITIAL);
+			    if(string_insert('\b') != 0 && !string_too_long){
+			        string_too_long = 1;
 			        cool_yylval.error_msg = "String constant too long";
 			        return(ERROR);
 			    }
 			}
 <STRING>\\[t]		{
-			    yytext[0] = '\t';
-			    if(string_insert(0) != 0){
-			        BEGIN(INITIAL);
+			    if(string_insert('\t') != 0 && !string_too_long){
+			        string_too_long = 1;
 			        cool_yylval.error_msg = "String constant too long";
 			        return(ERROR);
 			    }
 			}
 <STRING>\\[f]		{
-			    yytext[0] = '\f';
-			    if(string_insert(0) != 0){
-			        BEGIN(INITIAL);
+			    if(string_insert('\f') != 0 && !string_too_long){
+			        string_too_long = 1;
 			        cool_yylval.error_msg = "String constant too long";
 			        return(ERROR);
 			    }
 			}
 <STRING>\\[n]		{
-			    yytext[0] = '\n';
-			    if(string_insert(0) != 0){
-			        BEGIN(INITIAL);
+			    if(string_insert('\n') != 0 && !string_too_long){
+			        string_too_long = 1;
 			        cool_yylval.error_msg = "String constant too long";
 			        return(ERROR);
 			    }
@@ -186,12 +191,16 @@ objectid	[a-z]({letter}|{digit}|_)*
 			    return(ERROR);
 			}
 <STRING>\0		{
-			    cool_yylval.error_msg = "String contains null character";
-			    return(ERROR);
+			    if(!string_error){
+			        string_error = 1;
+			        cool_yylval.error_msg = "String contains null character";
+			        return(ERROR);
+			    }
 			}
+ /* for any other character, add it to the string if there is still space */
 <STRING>.		{
-			    if(string_insert(0) != 0){
-			        BEGIN(INITIAL);
+			    if(string_insert(yytext[0]) != 0 && !string_too_long){
+			        string_too_long = 1;
 			        cool_yylval.error_msg = "String constant too long";
 			        return(ERROR);
 			    }
@@ -266,15 +275,12 @@ objectid	[a-z]({letter}|{digit}|_)*
 		}
 %%
 
-int string_insert(int i){
+int string_insert(char ch){
     if(string_buf_ptr >= string_buf + MAX_STR_CONST - 1){
-        int c;
-        for(c = yyinput(); c != EOF && c != '"'; c = yyinput())
-            ;
         return 1;
     }
     else{
-        *string_buf_ptr++ = yytext[i];
+        *string_buf_ptr++ = ch;
         return 0;
     }
 }
