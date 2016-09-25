@@ -105,7 +105,7 @@ objectid	[a-z]({letter}|{digit}|_)*
 			    return(ERROR);
 			}
 "(*"			{
-			    comment_depth += 1;
+			    comment_depth = 1;
 			    BEGIN(COMMENT);
 			}
 <COMMENT>"(*"		{comment_depth += 1;}
