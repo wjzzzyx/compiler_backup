@@ -92,9 +92,16 @@ extern int VERBOSE_ERRORS;
       documentation for details). */
 
 /* Declare types for the grammar's non-terminals. */
-%type <program> program
-%type <classes> class_list
-%type <class_> class
+%type	<program>	program
+%type	<classes>	class_list
+%type	<class_		class
+%type	<features>	feature_list
+%type	<feature>	feature
+%type	<expressions>	expression_list
+%type	<expression>	expression
+%type	<formals>	formal_list
+%type	<formal>	formal
+
 
 /* You will want to change the following line. */
 %type <features> dummy_feature_list
@@ -106,28 +113,45 @@ extern int VERBOSE_ERRORS;
 /* 
    Save the root of the abstract syntax tree in a global variable.
 */
-program : class_list { ast_root = program($1); }
-        ;
+program		: class_list
+			{ ast_root = program($1); }
+		;
 
-class_list
-        : class            /* single class */
-                { $$ = single_Classes($1); }
-        | class_list class /* several classes */
-                { $$ = append_Classes($1,single_Classes($2)); }
-        ;
+class_list     	: class            /* single class */
+                	{ $$ = single_Classes($1); }
+        	| class_list class /* several classes */
+                	{ $$ = append_Classes($1,single_Classes($2)); }
+        	;
 
 /* If no parent is specified, the class inherits from the Object class. */
-class  : CLASS TYPEID '{' dummy_feature_list '}' ';'
-                { $$ = class_($2,idtable.add_string("Object"),$4,
-                              stringtable.add_string(curr_filename)); }
-        | CLASS TYPEID INHERITS TYPEID '{' dummy_feature_list '}' ';'
-                { $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
-        ;
+class  		: CLASS TYPEID '{' dummy_feature_list '}' ';'
+                	{ $$ = class_($2,idtable.add_string("Object"),$4,stringtable.add_string(curr_filename)); }
+        	| CLASS TYPEID INHERITS TYPEID '{' dummy_feature_list '}' ';'
+                	{ $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
+		| CLASS TYPEID '{' feature_list '}' ';'
+			{ $$ = class_($2,idtable.add_string("Object"),$4,stringtable.add_string(curr_filename)); }
+		| CLASS TYPEID INHERITS TYPEID '{' feature_list '}' ';'
+			{ $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
+        	;
 
 /* Feature list may be empty, but no empty features in list. */
 dummy_feature_list:        /* empty */
-                {  $$ = nil_Features(); }
-        ;
+                	{ $$ = nil_Features(); }
+        	;
+feature_list	: feature
+			{ $$ = single_Features($1); }
+		| feature_list feature
+			{ $$ = append_Features($1,single_Features($2)); }
+		;
+feature		: OBJECTID ':' TYPEID ';'
+			{ $$ = attr($1,$3,no_expr()); }
+		| OBJECTID ':' TYPEID ASSIGN expression ';'
+			{ $$ = attr($1,$3,$5); }
+		| OBJECTID '(' ')' ':' TYPEID '{' expression '}' ';'
+			{ $$ = method($1,nil_Formals(),$5,$7); }
+		| OBJECTID '(' formal_list ')' ':' TYPEID '{' expression '}' ';'
+			{ $$ = method($1,$3,$6,$8); }
+		;
 
 /* end of grammar */
 %%
