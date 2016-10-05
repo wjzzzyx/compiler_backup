@@ -94,10 +94,11 @@ extern int VERBOSE_ERRORS;
 /* Declare types for the grammar's non-terminals. */
 %type	<program>	program
 %type	<classes>	class_list
-%type	<class_		class
+%type	<class_>	class
 %type	<features>	feature_list
 %type	<feature>	feature
-%type	<expressions>	expression_list
+%type	<expressions>	exp_list
+%type	<expressions>	exp_block
 %type	<expression>	expression
 %type	<formals>	formal_list
 %type	<formal>	formal
@@ -107,7 +108,13 @@ extern int VERBOSE_ERRORS;
 %type <features> dummy_feature_list
 
 /* Precedence declarations go here. */
-
+%right ASSIGN
+%right NOT
+%nonassoc LE '=' '<'
+%left '+' '-'
+%left '*' '/'
+%right ISVOID
+%right '~'
 
 %%
 /* 
@@ -152,6 +159,64 @@ feature		: OBJECTID ':' TYPEID ';'
 		| OBJECTID '(' formal_list ')' ':' TYPEID '{' expression '}' ';'
 			{ $$ = method($1,$3,$6,$8); }
 		;
+formal_list	: formal
+			{ $$ = single_Formals($1); }
+		| formal_list ',' formal
+			{ $$ = append_Formals($1,single_Formals($3)); }
+		;
+formal		: OBJECTID ':' TYPEID
+			{ $$ = formal($1,$3); }
+		;
+expression	: BOOL_CONST
+			{ $$ = bool_const($1); }
+		| INT_CONST
+			{ $$ = int_const($1); }
+		| STR_CONST
+			{ $$ = string_const($1); }
+		| OBJECTID    /* TYPEID is not an expression */
+			{ $$ = object($1); }
+		| OBJECTID ASSIGN expression
+			{ $$ = assign($1,$3); }
+/*		| dispath_exp
+			{ }
+		| cond_exp
+			{ }
+		| loop_exp
+			{ }*/
+		| '(' expression ')'
+			{ $$ = $2; }
+		| '{' exp_block '}'
+			{ $$ = block($2); }
+/*		| let_exp
+		| case_exp*/
+		| NEW TYPEID
+			{ $$ = new_($2); }
+		| ISVOID expression
+			{ $$ = isvoid($2); }
+		| expression '+' expression
+			{ $$ = plus($1,$3); }
+		| expression '-' expression
+			{ $$ = sub($1,$3); }
+		| expression '*' expression
+			{ $$ = mul($1,$3); }
+		| expression '/' expression
+			{ $$ = divide($1,$3); }
+		| NOT expression
+			{ $$ = comp($2); }
+		| '~' expression
+			{ $$ = neg($2); }
+		;
+exp_list	: expression
+			{ $$ = single_Expressions($1); }
+		| exp_list ',' expression
+			{ $$ = append_Expressions($1,single_Expressions($3)); }
+		;
+exp_block	: expression ';'    /* ??? */
+			{ $$ = single_Expressions($1); }
+		| exp_block expression ';'
+			{ $$ = append_Expressions($1,single_Expressions($2)); }
+		;
+
 
 /* end of grammar */
 %%
