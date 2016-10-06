@@ -112,7 +112,7 @@ extern int VERBOSE_ERRORS;
 
 
 /* You will want to change the following line. */
-%type <features> dummy_feature_list
+/*%type <features> dummy_feature_list*/
 
 /* Precedence declarations go here. */
 %right ASSIGN
@@ -138,10 +138,10 @@ class_list  : class            /* single class */
         	;
 
 /* If no parent is specified, the class inherits from the Object class. */
-class  		: CLASS TYPEID '{' dummy_feature_list '}' ';'
-                { $$ = class_($2,idtable.add_string("Object"),$4,stringtable.add_string(curr_filename)); }
-        	| CLASS TYPEID INHERITS TYPEID '{' dummy_feature_list '}' ';'
-                { $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
+class  		: CLASS TYPEID '{' '}' ';'
+				{ $$ = class_($2,idtable.add_string("Object"),nil_Features(),stringtable.add_string(curr_filename)); }
+			| CLASS TYPEID INHERITS TYPEID '{' '}' ';'
+				{ $$ = class_($2,$4,nil_Features(),stringtable.add_string(curr_filename)); }
 			| CLASS TYPEID '{' feature_list '}' ';'
 				{ $$ = class_($2,idtable.add_string("Object"),$4,stringtable.add_string(curr_filename)); }
 			| CLASS TYPEID INHERITS TYPEID '{' feature_list '}' ';'
@@ -149,9 +149,9 @@ class  		: CLASS TYPEID '{' dummy_feature_list '}' ';'
         	;
 
 /* Feature list may be empty, but no empty features in list. */
-dummy_feature_list:        /* empty */
+/*dummy_feature_list:        
                 	{ $$ = nil_Features(); }
-        		;
+        		;*/
 feature_list	: feature
 					{ $$ = single_Features($1); }
 				| feature_list feature
@@ -227,7 +227,13 @@ exp_block	: expression ';'    /* ??? */
 				{ $$ = append_Expressions($1,single_Expressions($2)); }
 			;
 /* So far there is no shift/reduce conflict */
-dispatch_exp: expression '.' OBJECTID '(' exp_list ')'
+dispatch_exp: expression '.' OBJECTID '(' ')'
+				{ $$ = dispatch($1,$3,nil_Expressions()); }
+			| OBJECTID '(' ')'
+				{ $$ = dispatch(object(idtable.add_string("self")),$1,nil_Expressions()); }
+			| expression '@' TYPEID '.' OBJECTID '(' ')'
+				{ $$ = static_dispatch($1,$3,$5,nil_Expressions()); }
+			| expression '.' OBJECTID '(' exp_list ')'
 				{ $$ = dispatch($1,$3,$5); }
 			| OBJECTID '(' exp_list ')'
 				{ $$ = dispatch(object(idtable.add_string("self")),$1,$3); }
