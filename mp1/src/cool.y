@@ -100,8 +100,15 @@ extern int VERBOSE_ERRORS;
 %type	<expressions>	exp_list
 %type	<expressions>	exp_block
 %type	<expression>	expression
+%type	<expression>	dispatch_exp
+%type	<expression>	cond_exp
+%type	<expression>	loop_exp
+%type	<expression>	let_exp
+%type	<expression>	case_exp
 %type	<formals>	formal_list
 %type	<formal>	formal
+%type	<cases>		branch_list
+%type	<case_>		branch
 
 
 /* You will want to change the following line. */
@@ -121,102 +128,137 @@ extern int VERBOSE_ERRORS;
    Save the root of the abstract syntax tree in a global variable.
 */
 program		: class_list
-			{ ast_root = program($1); }
-		;
+				{ ast_root = program($1); }
+			;
 
-class_list     	: class            /* single class */
-                	{ $$ = single_Classes($1); }
+class_list  : class            /* single class */
+            	{ $$ = single_Classes($1); }
         	| class_list class /* several classes */
-                	{ $$ = append_Classes($1,single_Classes($2)); }
+		    	{ $$ = append_Classes($1,single_Classes($2)); }
         	;
 
 /* If no parent is specified, the class inherits from the Object class. */
 class  		: CLASS TYPEID '{' dummy_feature_list '}' ';'
-                	{ $$ = class_($2,idtable.add_string("Object"),$4,stringtable.add_string(curr_filename)); }
+                { $$ = class_($2,idtable.add_string("Object"),$4,stringtable.add_string(curr_filename)); }
         	| CLASS TYPEID INHERITS TYPEID '{' dummy_feature_list '}' ';'
-                	{ $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
-		| CLASS TYPEID '{' feature_list '}' ';'
-			{ $$ = class_($2,idtable.add_string("Object"),$4,stringtable.add_string(curr_filename)); }
-		| CLASS TYPEID INHERITS TYPEID '{' feature_list '}' ';'
-			{ $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
+                { $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
+			| CLASS TYPEID '{' feature_list '}' ';'
+				{ $$ = class_($2,idtable.add_string("Object"),$4,stringtable.add_string(curr_filename)); }
+			| CLASS TYPEID INHERITS TYPEID '{' feature_list '}' ';'
+				{ $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
         	;
 
 /* Feature list may be empty, but no empty features in list. */
 dummy_feature_list:        /* empty */
                 	{ $$ = nil_Features(); }
-        	;
+        		;
 feature_list	: feature
-			{ $$ = single_Features($1); }
-		| feature_list feature
-			{ $$ = append_Features($1,single_Features($2)); }
-		;
+					{ $$ = single_Features($1); }
+				| feature_list feature
+					{ $$ = append_Features($1,single_Features($2)); }
+				;
 feature		: OBJECTID ':' TYPEID ';'
-			{ $$ = attr($1,$3,no_expr()); }
-		| OBJECTID ':' TYPEID ASSIGN expression ';'
-			{ $$ = attr($1,$3,$5); }
-		| OBJECTID '(' ')' ':' TYPEID '{' expression '}' ';'
-			{ $$ = method($1,nil_Formals(),$5,$7); }
-		| OBJECTID '(' formal_list ')' ':' TYPEID '{' expression '}' ';'
-			{ $$ = method($1,$3,$6,$8); }
-		;
+				{ $$ = attr($1,$3,no_expr()); }
+			| OBJECTID ':' TYPEID ASSIGN expression ';'
+				{ $$ = attr($1,$3,$5); }
+			| OBJECTID '(' ')' ':' TYPEID '{' expression '}' ';'
+				{ $$ = method($1,nil_Formals(),$5,$7); }
+			| OBJECTID '(' formal_list ')' ':' TYPEID '{' expression '}' ';'
+				{ $$ = method($1,$3,$6,$8); }
+			;
 formal_list	: formal
-			{ $$ = single_Formals($1); }
-		| formal_list ',' formal
-			{ $$ = append_Formals($1,single_Formals($3)); }
-		;
+				{ $$ = single_Formals($1); }
+			| formal_list ',' formal
+				{ $$ = append_Formals($1,single_Formals($3)); }
+			;
 formal		: OBJECTID ':' TYPEID
-			{ $$ = formal($1,$3); }
-		;
+				{ $$ = formal($1,$3); }
+			;
 expression	: BOOL_CONST
-			{ $$ = bool_const($1); }
-		| INT_CONST
-			{ $$ = int_const($1); }
-		| STR_CONST
-			{ $$ = string_const($1); }
-		| OBJECTID    /* TYPEID is not an expression */
-			{ $$ = object($1); }
-		| OBJECTID ASSIGN expression
-			{ $$ = assign($1,$3); }
-/*		| dispath_exp
-			{ }
-		| cond_exp
-			{ }
-		| loop_exp
-			{ }*/
-		| '(' expression ')'
-			{ $$ = $2; }
-		| '{' exp_block '}'
-			{ $$ = block($2); }
-/*		| let_exp
-		| case_exp*/
-		| NEW TYPEID
-			{ $$ = new_($2); }
-		| ISVOID expression
-			{ $$ = isvoid($2); }
-		| expression '+' expression
-			{ $$ = plus($1,$3); }
-		| expression '-' expression
-			{ $$ = sub($1,$3); }
-		| expression '*' expression
-			{ $$ = mul($1,$3); }
-		| expression '/' expression
-			{ $$ = divide($1,$3); }
-		| NOT expression
-			{ $$ = comp($2); }
-		| '~' expression
-			{ $$ = neg($2); }
-		;
+				{ $$ = bool_const($1); }
+			| INT_CONST
+				{ $$ = int_const($1); }
+			| STR_CONST
+				{ $$ = string_const($1); }
+			| OBJECTID    /* TYPEID is not an expression */
+				{ $$ = object($1); }
+			| OBJECTID ASSIGN expression
+				{ $$ = assign($1,$3); }
+			| dispatch_exp
+			| cond_exp
+			| loop_exp
+			| '(' expression ')'
+				{ $$ = $2; }
+			| '{' exp_block '}'
+				{ $$ = block($2); }
+			| let_exp
+			| case_exp
+			| NEW TYPEID
+				{ $$ = new_($2); }
+			| ISVOID expression
+				{ $$ = isvoid($2); }
+			| expression '+' expression
+				{ $$ = plus($1,$3); }
+			| expression '-' expression
+				{ $$ = sub($1,$3); }
+			| expression '*' expression
+				{ $$ = mul($1,$3); }
+			| expression '/' expression
+				{ $$ = divide($1,$3); }
+			| NOT expression
+				{ $$ = comp($2); }
+			| '~' expression
+				{ $$ = neg($2); }
+			| expression '<' expression
+				{ $$ = lt($1,$3); }
+			| expression LE expression
+				{ $$ = leq($1,$3); }
+			| expression '=' expression
+				{ $$ = eq($1,$3); }
+			;
 exp_list	: expression
-			{ $$ = single_Expressions($1); }
-		| exp_list ',' expression
-			{ $$ = append_Expressions($1,single_Expressions($3)); }
-		;
+				{ $$ = single_Expressions($1); }
+			| exp_list ',' expression
+				{ $$ = append_Expressions($1,single_Expressions($3)); }
+			;
 exp_block	: expression ';'    /* ??? */
-			{ $$ = single_Expressions($1); }
-		| exp_block expression ';'
-			{ $$ = append_Expressions($1,single_Expressions($2)); }
-		;
-
+				{ $$ = single_Expressions($1); }
+			| exp_block expression ';'
+				{ $$ = append_Expressions($1,single_Expressions($2)); }
+			;
+/* So far there is no shift/reduce conflict */
+dispatch_exp: expression '.' OBJECTID '(' exp_list ')'
+				{ $$ = dispatch($1,$3,$5); }
+			| OBJECTID '(' exp_list ')'
+				{ $$ = dispatch(object(idtable.add_string("self")),$1,$3); }
+			| expression '@' TYPEID '.' OBJECTID '(' exp_list ')'
+				{ $$ = static_dispatch($1,$3,$5,$7); }
+			;
+/* So far there are 22 shift/reduce conflicts.They rise when it needs to determine whether an exp is the starting of a dispatch_exp. The default shift action is adopted. */
+cond_exp	: IF expression THEN expression ELSE expression FI
+				{ $$ = cond($2,$4,$6); }
+			;
+loop_exp	: WHILE expression LOOP expression POOL
+				{ $$ = loop($2,$4); }
+			;
+/* I am not sure if let_exp is defined as such */
+let_exp		: LET OBJECTID ':' TYPEID IN expression
+				{ $$ = let($2,$4,no_expr(),$6); }
+			| LET OBJECTID ':' TYPEID ASSIGN expression IN expression
+				{ $$ = let($2,$4,$6,$8); }
+			;
+/* So far 18 more shift/reduce conflicts are caused. They rise when it needs to determine whether to reduce a let_exp or shift to a longer exp at the tail of a let_exp. The default shift action is adopted. */
+case_exp	: CASE expression OF branch_list ESAC
+				{ $$ = typcase($2,$4); }
+			;
+branch_list	: branch
+				{ $$ = single_Cases($1); }
+			| branch_list branch
+				{ $$ = append_Cases($1,single_Cases($2)); }
+			;
+branch		: OBJECTID ':' TYPEID DARROW expression ';'
+				{ $$ = branch($1,$3,$5); }
+			;
 
 /* end of grammar */
 %%
