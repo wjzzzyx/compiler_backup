@@ -141,6 +141,7 @@ class_list  : class            /* single class */
         	;
 
 /* If no parent is specified, the class inherits from the Object class. */
+/* Empty feature list and non-empty feature list are handled separately. */
 class  		: CLASS TYPEID '{' '}' ';'
 				{ $$ = class_($2,idtable.add_string("Object"),nil_Features(),stringtable.add_string(curr_filename)); }
 			| CLASS TYPEID INHERITS TYPEID '{' '}' ';'
@@ -151,32 +152,35 @@ class  		: CLASS TYPEID '{' '}' ';'
 				{ $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
         	;
 
-/* Feature list may be empty, but no empty features in list. */
-/*dummy_feature_list:        
-                	{ $$ = nil_Features(); }
-        		;*/
+/* Definition of non-empty feature list */
 feature_list	: feature
 					{ $$ = single_Features($1); }
 				| feature_list feature
 					{ $$ = append_Features($1,single_Features($2)); }
 				;
-feature		: OBJECTID ':' TYPEID ';'
+
+feature		: OBJECTID ':' TYPEID ';'    /* Attribute */
 				{ $$ = attr($1,$3,no_expr()); }
-			| OBJECTID ':' TYPEID ASSIGN expression ';'
+			| OBJECTID ':' TYPEID ASSIGN expression ';'    /* Attribute with initialization */
 				{ $$ = attr($1,$3,$5); }
-			| OBJECTID '(' ')' ':' TYPEID '{' expression '}' ';'
+			| OBJECTID '(' ')' ':' TYPEID '{' expression '}' ';'    /* Method */
 				{ $$ = method($1,nil_Formals(),$5,$7); }
-			| OBJECTID '(' formal_list ')' ':' TYPEID '{' expression '}' ';'
+			| OBJECTID '(' formal_list ')' ':' TYPEID '{' expression '}' ';'    /* Method with formals */
 				{ $$ = method($1,$3,$6,$8); }
 			;
+
+/* Definition of non-empty formal list */
 formal_list	: formal
 				{ $$ = single_Formals($1); }
 			| formal_list ',' formal
 				{ $$ = append_Formals($1,single_Formals($3)); }
 			;
+
 formal		: OBJECTID ':' TYPEID
 				{ $$ = formal($1,$3); }
 			;
+
+/* Definition of all kinds of expressions */
 expression	: BOOL_CONST
 				{ $$ = bool_const($1); }
 			| INT_CONST
@@ -219,17 +223,23 @@ expression	: BOOL_CONST
 			| expression '=' expression
 				{ $$ = eq($1,$3); }
 			;
+
+/* Definition of non-empty expression list. Used in dispatch expressions. */
 exp_list	: expression
 				{ $$ = single_Expressions($1); }
 			| exp_list ',' expression
 				{ $$ = append_Expressions($1,single_Expressions($3)); }
 			;
-exp_block	: expression ';'    /* ??? */
+
+/* The definition of expression block does not consider the outer '{' and '}'. */
+/* In an expression block, expressions are terminated by ';'. */ 
+exp_block	: expression ';'
 				{ $$ = single_Expressions($1); }
 			| exp_block expression ';'
 				{ $$ = append_Expressions($1,single_Expressions($2)); }
 			;
 
+/* There are three kinds of dispatch expressions, and the circumstances of empty feature list and non-empty feature list are handled separately. */
 dispatch_exp: expression '.' OBJECTID '(' ')'
 				{ $$ = dispatch($1,$3,nil_Expressions()); }
 			| OBJECTID '(' ')'
@@ -247,11 +257,13 @@ dispatch_exp: expression '.' OBJECTID '(' ')'
 cond_exp	: IF expression THEN expression ELSE expression FI
 				{ $$ = cond($2,$4,$6); }
 			;
+
 loop_exp	: WHILE expression LOOP expression POOL
 				{ $$ = loop($2,$4); }
 			;
-/* So far there is no shift/reduce or reduce/reduce conflict */
-/* I am not sure if let_exp is defined as such */
+/* So far there is no shift/reduce or reduce/reduce conflict. */
+/* I am not sure if let_exp is defined as such. It seems work. */
+/* The optional initialization part of a let expression */
 let_init	:
 				{ $$ = no_expr(); }
 			| ASSIGN expression
@@ -266,27 +278,12 @@ let_exp		: OBJECTID ':' TYPEID let_init IN expression
 			| LET OBJECTID ':' TYPEID let_init ',' let_exp
 				{ $$ = let($2, $4, $5, $7); }
 			;
-/*			OBJECTID ':' TYPEID IN expression
-				{ $$ = let($1,$3,no_expr(),$5); }
-			| OBJECTID ':' TYPEID ASSIGN expression IN expression
-				{ $$ = let($1,$3,$5,$7); }
-			| OBJECTID ':' TYPEID ',' let_exp
-				{ $$ = let($1,$3,no_expr(),$5); }
-			| OBJECTID ':' TYPEID ASSIGN expression ',' let_exp
-				{ $$ = let($1,$3,$5,$7); }
-			| LET OBJECTID ':' TYPEID IN expression
-				{ $$ = let($2,$4,no_expr(),$6); }
-			| LET OBJECTID ':' TYPEID ASSIGN expression IN expression
-				{ $$ = let($2,$4,$6,$8); }
-			| LET OBJECTID ':' TYPEID ',' let_exp
-				{ $$ = let($2,$4,no_expr(),$6); }
-			| LET OBJECTID ':' TYPEID ASSIGN expression ',' let_exp
-				{ $$ = let($2,$4,$6,$8); }
-			;*/
-/* So far 36 more shift/reduce conflicts are caused. They rise when it needs to determine whether to reduce a let_exp or shift to a longer exp at the tail of a let_exp. The default shift action is adopted. */
+/* So far 18 more shift/reduce conflicts are caused. They rise when it needs to determine whether to reduce a let_exp or shift to a longer exp at the tail of a let_exp. The default shift action is adopted. */
+
 case_exp	: CASE expression OF branch_list ESAC
 				{ $$ = typcase($2,$4); }
 			;
+/* Definition of non-empty branch list. A branch list cannot be empty. */
 branch_list	: branch
 				{ $$ = single_Cases($1); }
 			| branch_list branch
