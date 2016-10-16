@@ -86,7 +86,7 @@ extern int VERBOSE_ERRORS;
 
 /*  DON'T CHANGE ANYTHING ABOVE THIS LINE, OR YOUR PARSER WONT WORK       */
 /**************************************************************************/
- 
+
    /* Complete the nonterminal list below, giving a type for the semantic
       value of each non terminal. (See section 3.6 in the bison 
       documentation for details). */
@@ -104,6 +104,7 @@ extern int VERBOSE_ERRORS;
 %type	<expression>	cond_exp
 %type	<expression>	loop_exp
 %type	<expression>	let_exp
+%type	<expression>	let_init
 %type	<expression>	case_exp
 %type	<formals>	formal_list
 %type	<formal>	formal
@@ -122,6 +123,8 @@ extern int VERBOSE_ERRORS;
 %left '*' '/'
 %right ISVOID
 %right '~'
+%nonassoc '@'
+%nonassoc '.'
 
 %%
 /* 
@@ -226,7 +229,7 @@ exp_block	: expression ';'    /* ??? */
 			| exp_block expression ';'
 				{ $$ = append_Expressions($1,single_Expressions($2)); }
 			;
-/* So far there is no shift/reduce conflict */
+
 dispatch_exp: expression '.' OBJECTID '(' ')'
 				{ $$ = dispatch($1,$3,nil_Expressions()); }
 			| OBJECTID '(' ')'
@@ -240,20 +243,47 @@ dispatch_exp: expression '.' OBJECTID '(' ')'
 			| expression '@' TYPEID '.' OBJECTID '(' exp_list ')'
 				{ $$ = static_dispatch($1,$3,$5,$7); }
 			;
-/* So far there are 22 shift/reduce conflicts.They rise when it needs to determine whether an exp is the starting of a dispatch_exp. The default shift action is adopted. */
+
 cond_exp	: IF expression THEN expression ELSE expression FI
 				{ $$ = cond($2,$4,$6); }
 			;
 loop_exp	: WHILE expression LOOP expression POOL
 				{ $$ = loop($2,$4); }
 			;
+/* So far there is no shift/reduce or reduce/reduce conflict */
 /* I am not sure if let_exp is defined as such */
-let_exp		: LET OBJECTID ':' TYPEID IN expression
+let_init	:
+				{ $$ = no_expr(); }
+			| ASSIGN expression
+				{ $$ = $2; }
+			;
+let_exp		: OBJECTID ':' TYPEID let_init IN expression
+				{ $$ = let($1, $3, $4, $6); }
+			| OBJECTID ':' TYPEID let_init ',' let_exp
+				{ $$ = let($1, $3, $4, $6); }
+			| LET OBJECTID ':' TYPEID let_init IN expression
+				{ $$ = let($2, $4, $5, $7); }
+			| LET OBJECTID ':' TYPEID let_init ',' let_exp
+				{ $$ = let($2, $4, $5, $7); }
+			;
+/*			OBJECTID ':' TYPEID IN expression
+				{ $$ = let($1,$3,no_expr(),$5); }
+			| OBJECTID ':' TYPEID ASSIGN expression IN expression
+				{ $$ = let($1,$3,$5,$7); }
+			| OBJECTID ':' TYPEID ',' let_exp
+				{ $$ = let($1,$3,no_expr(),$5); }
+			| OBJECTID ':' TYPEID ASSIGN expression ',' let_exp
+				{ $$ = let($1,$3,$5,$7); }
+			| LET OBJECTID ':' TYPEID IN expression
 				{ $$ = let($2,$4,no_expr(),$6); }
 			| LET OBJECTID ':' TYPEID ASSIGN expression IN expression
 				{ $$ = let($2,$4,$6,$8); }
-			;
-/* So far 18 more shift/reduce conflicts are caused. They rise when it needs to determine whether to reduce a let_exp or shift to a longer exp at the tail of a let_exp. The default shift action is adopted. */
+			| LET OBJECTID ':' TYPEID ',' let_exp
+				{ $$ = let($2,$4,no_expr(),$6); }
+			| LET OBJECTID ':' TYPEID ASSIGN expression ',' let_exp
+				{ $$ = let($2,$4,$6,$8); }
+			;*/
+/* So far 36 more shift/reduce conflicts are caused. They rise when it needs to determine whether to reduce a let_exp or shift to a longer exp at the tail of a let_exp. The default shift action is adopted. */
 case_exp	: CASE expression OF branch_list ESAC
 				{ $$ = typcase($2,$4); }
 			;
