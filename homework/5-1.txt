@@ -1,0 +1,18 @@
+答：程序源代码如下
+int main()
+{
+    int a;
+    enum week{Mon = 1, Mon = 1, Tues, Wed, Thurs, Fri, Sat, Sun};
+    break;
+}
+其中有控制流错误（break）和唯一性错误（enum定义中重复的定义）。
+用gcc编译，确认编译器进行了检查并报告了这两个错误：
+test.c:4:24: error: redeclaration of enumerator ‘Mon’
+     enum week{Mon = 1, Mon = 1, Tues, Wed, Thurs, Fri, Sat, Sun};
+                        ^
+test.c:4:15: note: previous definition of ‘Mon’ was here
+     enum week{Mon = 1, Mon = 1, Tues, Wed, Thurs, Fri, Sat, Sun};
+               ^
+test.c:5:5: error: break statement not within loop or switch
+     break;
+
