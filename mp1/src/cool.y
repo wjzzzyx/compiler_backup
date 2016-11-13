@@ -150,6 +150,47 @@ class  		: CLASS TYPEID '{' '}' ';'
 				{ $$ = class_($2,idtable.add_string("Object"),$4,stringtable.add_string(curr_filename)); }
 			| CLASS TYPEID INHERITS TYPEID '{' feature_list '}' ';'
 				{ $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
+/* Error recovery */
+			| CLASS error '{' '}' ';'
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Class name error, or missing '{'\n");
+				}
+			| CLASS error '{' feature_list '}' ';'
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Class name error, or missing '{'\n");
+				}
+			| CLASS TYPEID '{' error '}' ';'
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Error in class body, or missing '}'\n");
+				}
+			| CLASS TYPEID INHERITS TYPEID '{' error '}' ';'
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Error in class body, or missing '}'\n");
+				}
+			| CLASS TYPEID '{' '}' error
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after class\n");
+				}
+			| CLASS TYPEID INHERITS TYPEID '{' '}' error
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after class\n");
+				}
+			| CLASS TYPEID '{' feature_list '}' error
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after class\n");
+				}
+			| CLASS TYPEID INHERITS TYPEID '{' feature_list '}' error
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after class\n");
+				}
         	;
 
 /* Definition of non-empty feature list */
@@ -167,6 +208,32 @@ feature		: OBJECTID ':' TYPEID ';'    /* Attribute */
 				{ $$ = method($1,nil_Formals(),$5,$7); }
 			| OBJECTID '(' formal_list ')' ':' TYPEID '{' expression '}' ';'    /* Method with formals */
 				{ $$ = method($1,$3,$6,$8); }
+/* error recovery */
+			| error ';'
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Error in feature\n");
+				}
+			| OBJECTID ':' TYPEID error
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after feature\n");
+				}
+			| OBJECTID ':' TYPEID ASSIGN expression error
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after feature\n");
+				}
+			| OBJECTID '(' ')' ':' TYPEID '{' expression '}' error
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after feature\n");
+				}
+			| OBJECTID '(' formal_list ')' ':' TYPEID '{' expression '}' error
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after feature\n");
+				}
 			;
 
 /* Definition of non-empty formal list */
@@ -222,6 +289,9 @@ expression	: BOOL_CONST
 				{ $$ = leq($1,$3); }
 			| expression '=' expression
 				{ $$ = eq($1,$3); }
+/* error recovery */
+			| error
+				{ }			
 			;
 
 /* Definition of non-empty expression list. Used in dispatch expressions. */
@@ -237,6 +307,21 @@ exp_block	: expression ';'
 				{ $$ = single_Expressions($1); }
 			| exp_block expression ';'
 				{ $$ = append_Expressions($1,single_Expressions($2)); }
+/* error recovery */
+			| expression error
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after expression in block\n");
+				}
+			| exp_block expression error
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after expression in block\n");
+				}			
+			| error ';'
+				{}
+			| exp_block error ';'
+				{}			
 			;
 
 /* There are three kinds of dispatch expressions, and the circumstances of empty feature list and non-empty feature list are handled separately. */
@@ -256,10 +341,27 @@ dispatch_exp: expression '.' OBJECTID '(' ')'
 
 cond_exp	: IF expression THEN expression ELSE expression FI
 				{ $$ = cond($2,$4,$6); }
+/* error recovery */
+			| IF error FI
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Error in if expression\n");
+				}
+			| IF expression THEN expression ELSE expression error
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after if expression\n");
+				}			
 			;
 
 loop_exp	: WHILE expression LOOP expression POOL
 				{ $$ = loop($2,$4); }
+/* error recovery */
+			| WHILE error POOL
+				{
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Error in while expression\n");
+				}			
 			;
 /* So far there is no shift/reduce or reduce/reduce conflict. */
 /* I am not sure if let_exp is defined as such. It seems work. */
@@ -277,6 +379,9 @@ let_exp		: OBJECTID ':' TYPEID let_init IN expression
 				{ $$ = let($2, $4, $5, $7); }
 			| LET OBJECTID ':' TYPEID let_init ',' let_exp
 				{ $$ = let($2, $4, $5, $7); }
+/* error recovery */
+			| LET error IN expression
+				{}			
 			;
 /* So far 18 more shift/reduce conflicts are caused. They rise when it needs to determine whether to reduce a let_exp or shift to a longer exp at the tail of a let_exp. The default shift action is adopted. */
 
