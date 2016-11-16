@@ -22,4 +22,16 @@
     formal_list:其中一个formal错误，可以跳到下一个formal。
     expression:可以处理条件语句、循环语句、let语句和case语句中的部分错误。例如，可以处理条件语句中除了末尾的fi缺失外的其他错误、循环语句中末尾的pool缺失外的其他错误。可以处理let语句中变量列表错误或in缺失错误。
     expression block:其中一条表达式错误，可以跳出到下一条表达式。
-    expression list:
+    expression list:其中一条表达式错误，可以跳到下一条表达式。
+
+    错误样例见bison_test_bad.cl，其中的错误分别是：
+    #30 类名错误
+    #31 attribute错误
+    #33 formal_list错误
+    #38 expression list 错误
+    #39 if语句错误
+    #52 case语句错误
+    #59 类定义错误，并缺少末尾分号
+    #61 inherits关键字错误
+    #83 let语句错误
+    #107 文件结尾的class缺少分号

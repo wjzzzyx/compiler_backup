@@ -27,15 +27,17 @@ Class E inherits A {
 ;
 *)
 
-class A A{
-	a : INT <- 10 ,10;
+class a{
+	a : INT <- 10,10;
 	d : INT;
 	m1(b : STRING, c : BB__ jump) : BOOL
 	{
 		{
 			a <- 20;
 			d <- d * a;
+			f.test(abc, abc,);
 			if : then 2 else 3 fi;
+			
 		}
 	};
 	m2(b : INT) : SELF_TYPE
@@ -46,6 +48,9 @@ class A A{
 			 in b1 + b2 * 5
 			);
 			(b5 <- 1);
+			case 1 of 
+				b6 : b7 => 1, 2;
+			esac;
 			self;
 		}
 	};
@@ -76,7 +81,7 @@ Class Main inherits IO {
 			a <- new A;
 			s <- "block";
 			let f : F(*,*) g : G, h : A <- a (*in*) 
-				case f.test(g.test(h.m2(34)), not) of
+				case f.test(g.test(h.m2(34))) of
 					a : Main => if isvoid a.m1("wander", new BB__) then
 									b <- (new BB__).getbba(self)
 								else
