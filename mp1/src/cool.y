@@ -150,27 +150,15 @@ class  		: CLASS TYPEID '{' '}' ';'
 				{ $$ = class_($2,idtable.add_string("Object"),$4,stringtable.add_string(curr_filename)); }
 			| CLASS TYPEID INHERITS TYPEID '{' feature_list '}' ';'
 				{ $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
-/* Error recovery */
-			| CLASS error '{' '}' ';'
-				{
-					if(VERBOSE_ERRORS)
-						fprintf(stderr, "Class name error, or missing '{'\n");
-				}
+			/* Error recovery */
+			| CLASS error ';'
+				{ $$ = NULL; }
 			| CLASS error '{' feature_list '}' ';'
-				{
-					if(VERBOSE_ERRORS)
-						fprintf(stderr, "Class name error, or missing '{'\n");
-				}
-			| CLASS TYPEID '{' error '}' ';'
-				{
-					if(VERBOSE_ERRORS)
-						fprintf(stderr, "Error in class body, or missing '}'\n");
-				}
-			| CLASS TYPEID INHERITS TYPEID '{' error '}' ';'
-				{
-					if(VERBOSE_ERRORS)
-						fprintf(stderr, "Error in class body, or missing '}'\n");
-				}
+				{ $$ = NULL; }
+			| CLASS error CLASS
+				{ $$ = NULL; yychar = CLASS; }
+			| CLASS error '{' feature_list '}' CLASS
+				{ $$ = NULL; yychar = CLASS; }
 			| CLASS TYPEID '{' '}' error
 				{
 					if(VERBOSE_ERRORS)
@@ -198,6 +186,8 @@ feature_list	: feature
 					{ $$ = single_Features($1); }
 				| feature_list feature
 					{ $$ = append_Features($1,single_Features($2)); }
+				/* error recovery */
+
 				;
 
 feature		: OBJECTID ':' TYPEID ';'    /* Attribute */
@@ -208,29 +198,34 @@ feature		: OBJECTID ':' TYPEID ';'    /* Attribute */
 				{ $$ = method($1,nil_Formals(),$5,$7); }
 			| OBJECTID '(' formal_list ')' ':' TYPEID '{' expression '}' ';'    /* Method with formals */
 				{ $$ = method($1,$3,$6,$8); }
-/* error recovery */
+			/* error recovery */
 			| error ';'
 				{
+					$$ = NULL;
 					if(VERBOSE_ERRORS)
 						fprintf(stderr, "Error in feature\n");
 				}
 			| OBJECTID ':' TYPEID error
 				{
+					$$ = NULL;
 					if(VERBOSE_ERRORS)
 						fprintf(stderr, "Missing semicolon after feature\n");
 				}
 			| OBJECTID ':' TYPEID ASSIGN expression error
 				{
+					$$ = NULL;
 					if(VERBOSE_ERRORS)
 						fprintf(stderr, "Missing semicolon after feature\n");
 				}
 			| OBJECTID '(' ')' ':' TYPEID '{' expression '}' error
 				{
+					$$ = NULL;
 					if(VERBOSE_ERRORS)
 						fprintf(stderr, "Missing semicolon after feature\n");
 				}
 			| OBJECTID '(' formal_list ')' ':' TYPEID '{' expression '}' error
 				{
+					$$ = NULL;
 					if(VERBOSE_ERRORS)
 						fprintf(stderr, "Missing semicolon after feature\n");
 				}
@@ -241,6 +236,15 @@ formal_list	: formal
 				{ $$ = single_Formals($1); }
 			| formal_list ',' formal
 				{ $$ = append_Formals($1,single_Formals($3)); }
+			/* error recovery */
+			| error ','
+				{ $$ = NULL; yychar = ','; }
+			| error ')'
+				{ $$ = NULL; yychar = ')'; }
+			| formal_list ',' error ','
+				{ $$ = NULL; yychar = ','; }
+			| formal_list ',' error ')'
+				{ $$ = NULL; yychar = ')'; }
 			;
 
 formal		: OBJECTID ':' TYPEID
@@ -289,9 +293,8 @@ expression	: BOOL_CONST
 				{ $$ = leq($1,$3); }
 			| expression '=' expression
 				{ $$ = eq($1,$3); }
-/* error recovery */
-			| error
-				{ }			
+			/* error recovery */
+
 			;
 
 /* Definition of non-empty expression list. Used in dispatch expressions. */
@@ -299,6 +302,15 @@ exp_list	: expression
 				{ $$ = single_Expressions($1); }
 			| exp_list ',' expression
 				{ $$ = append_Expressions($1,single_Expressions($3)); }
+			/* error recovery */
+			| error ','
+				{ $$ = NULL; yychar = ','; }
+			| error ')'
+				{ $$ = NULL; yychar = ')'; }
+			| exp_list ',' error ','
+				{ $$ = NULL; yychar = ','; }
+			| exp_list ',' error ')'
+				{ $$ = NULL; yychar = ')'; }
 			;
 
 /* The definition of expression block does not consider the outer '{' and '}'. */
@@ -307,7 +319,7 @@ exp_block	: expression ';'
 				{ $$ = single_Expressions($1); }
 			| exp_block expression ';'
 				{ $$ = append_Expressions($1,single_Expressions($2)); }
-/* error recovery */
+			/* error recovery */
 			| expression error
 				{
 					if(VERBOSE_ERRORS)
@@ -319,9 +331,9 @@ exp_block	: expression ';'
 						fprintf(stderr, "Missing semicolon after expression in block\n");
 				}			
 			| error ';'
-				{}
+				{ $$ = NULL; }
 			| exp_block error ';'
-				{}			
+				{ $$ = NULL; }		
 			;
 
 /* There are three kinds of dispatch expressions, and the circumstances of empty feature list and non-empty feature list are handled separately. */
@@ -341,27 +353,30 @@ dispatch_exp: expression '.' OBJECTID '(' ')'
 
 cond_exp	: IF expression THEN expression ELSE expression FI
 				{ $$ = cond($2,$4,$6); }
-/* error recovery */
+			/* error recovery */
 			| IF error FI
 				{
+					$$ = NULL;
 					if(VERBOSE_ERRORS)
 						fprintf(stderr, "Error in if expression\n");
 				}
 			| IF expression THEN expression ELSE expression error
 				{
+					$$ = NULL;
 					if(VERBOSE_ERRORS)
-						fprintf(stderr, "Missing semicolon after if expression\n");
-				}			
+						fprintf(stderr, "Missing fi after if expression\n");
+				}
 			;
 
 loop_exp	: WHILE expression LOOP expression POOL
 				{ $$ = loop($2,$4); }
-/* error recovery */
+			/* error recovery */
 			| WHILE error POOL
 				{
+					$$ = NULL;
 					if(VERBOSE_ERRORS)
 						fprintf(stderr, "Error in while expression\n");
-				}			
+				}
 			;
 /* So far there is no shift/reduce or reduce/reduce conflict. */
 /* I am not sure if let_exp is defined as such. It seems work. */
@@ -379,15 +394,20 @@ let_exp		: OBJECTID ':' TYPEID let_init IN expression
 				{ $$ = let($2, $4, $5, $7); }
 			| LET OBJECTID ':' TYPEID let_init ',' let_exp
 				{ $$ = let($2, $4, $5, $7); }
-/* error recovery */
-			| LET error IN expression
-				{}			
+			/* error recovery */
+			| LET error expression
+				{ $$ = NULL; }	
 			;
 /* So far 18 more shift/reduce conflicts are caused. They rise when it needs to determine whether to reduce a let_exp or shift to a longer exp at the tail of a let_exp. The default shift action is adopted. */
 
 case_exp	: CASE expression OF branch_list ESAC
 				{ $$ = typcase($2,$4); }
+			/* error recovery */
+			| CASE error ESAC
+				{ $$ = NULL; }
 			;
+
+			
 /* Definition of non-empty branch list. A branch list cannot be empty. */
 branch_list	: branch
 				{ $$ = single_Cases($1); }
@@ -396,6 +416,9 @@ branch_list	: branch
 			;
 branch		: OBJECTID ':' TYPEID DARROW expression ';'
 				{ $$ = branch($1,$3,$5); }
+			/* error recovery */			
+			| error ';'
+				{ $$ = NULL; }
 			;
 
 /* end of grammar */
