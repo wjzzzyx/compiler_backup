@@ -322,11 +322,13 @@ exp_block	: expression ';'
 			/* error recovery */
 			| expression error
 				{
+					$$ = NULL;
 					if(VERBOSE_ERRORS)
 						fprintf(stderr, "Missing semicolon after expression in block\n");
 				}
 			| exp_block expression error
 				{
+					$$ = NULL;
 					if(VERBOSE_ERRORS)
 						fprintf(stderr, "Missing semicolon after expression in block\n");
 				}			
