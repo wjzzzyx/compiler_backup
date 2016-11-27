@@ -1,0 +1,21 @@
+CPU: corei7-4500U
+内存大小: 4g + 8g swap
+操作系统: ubuntu 16.04
+cmake目标: make
+cmake build type: Debug
+编译线程数: 2 -> 1
+编译耗时: 6h
+内存占用峰值: 2个线程时内存不够出错，1个线程时为7.6G
+遇到的问题:
+collect2: fatal error: ld terminated with signal 9 [已杀死]
+compilation terminated.
+tools/clang/tools/driver/CMakeFiles/clang.dir/build.make:310: recipe for target 'bin/clang-3.9' failed
+make[2]: *** [bin/clang-3.9] Error 1
+make[2]: *** Deleting file 'bin/clang-3.9'
+CMakeFiles/Makefile2:17466: recipe for target 'tools/clang/tools/driver/CMakeFiles/clang.dir/all' failed
+make[1]: *** [tools/clang/tools/driver/CMakeFiles/clang.dir/all] Error 2
+make[1]: *** 正在等待未完成的任务....
+[ 98%] Built target LTO
+Makefile:149: recipe for target 'all' failed
+make: *** [all] Error 2
+解决办法：只开一个线程

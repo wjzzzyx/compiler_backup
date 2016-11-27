@@ -1,0 +1,60 @@
+3.2
+1.Checher 对于程序的分析主要是在AST上还是在CFG上进行？
+CFG
+2.Checker在分析程序时需要记录程序状态，这些状态一般保存在哪里？
+<program point, program state> 对一起保存在ExplodedGraph的节点中。
+3.简要解释分析器在分析下面程序片段时的过程，在过程中产生了哪些symbolic values?它们的关系是什么？
+在分析第一行“int x = 3, y = 4;”时，创建引用常数3的SVal，创建引用x的左值（MemRegion）的SVal，然后在store中将两者关联，再创建引用常数4的SVal，创建引用y的MemRegion的SVal，然后在store中将两者关联。
+在分析第二行“int *p = &x;”时，创建引用x的左值(MemRegion)的Sval，创建引用p的MemRegion的Sval，然后在store中将两者关联（p的MemRegion映射到的值是x的MemRegion）。
+在分析第三行“int z = *(p + 1);”时，先创建引用p的值的SVal和引用常数1的SVal，然后用这两个子表达式的SVal构造一个代表p+1的值的SVal，记为$1。接着构造store中与$1相关联的符号值$2，最后创建引用z的左值的Sval，并在store中将它与$2关联。
+
+3.3
+1.
+C++11/14的智能指针有unique_ptr、shared_ptr、weak_ptr三种。
+unique_ptr的特点是在离开作用域时能自动释放所指向的对象的内存空间，且两个unique_ptr不能指向同一个对象。使用unique_ptr可为处理拥有动态寿命的函数和对象提供额外保护。
+与unique_ptr的独占性不同，多个shared_ptr可以共用一个对象，由最后退出作用域的shared_ptr负责对象的释放，因此需要引用计数。但它会在链式结构中遇到循环引用的问题。
+weak_ptr一般需要搭配shared_ptr使用，它和shared_ptr的区别在于它不会增加引用计数，也不能直接进行对象的存取，主要用来监控与之搭配的shared_ptr的状况。由于weak_ptr不增加引用计数，因此当shared_ptr退出后，对象即被释放。使用weak_ptr进行对象存取时，要先用lock()方法将它转换为一个shared_ptr。
+
+2.
+LLVM不使用C++的RTTI是因为它有缺陷，主要是dynamic_cast<>只能用于有虚函数表的类，而且它违背了C++的“you only pay for what you use”原则，导致可执行程序过大。
+LLVM提供的替代机制有：
+isa<>：判断指针或引用是否指向一个指定的类的实例，返回true或false。
+cast<>：将一个类型为指向基类的指针或引用转化为指向派生类的实例的指针或引用。由程序员保证其作用的对象可以正确地进行类型转化，否则引发断言错误。
+dyn_cast<>：其行为类似于C++中的dynamic_cast<>，先检查指针所指的对象是否具有正确的类型，如果是，进行基类到派生类的指针类型转换，否则返回空指针。相当于isa<>测试后跟着一条cast<>语句。它不支持引用的转换。
+cast_or_null<>：类似于cast<>，但可以接受空指针作为参数。
+dyn_cast_or_null<>：类似于dyn_cast<>，但可以接受空指针作为参数。
+以上五种模板可以被用于任何类，而不只是有虚函数的类。
+
+3.
+写一个函数，它的参数既可以是数组，也可以是std::vector，那么声明参数为auto类型。
+
+4.
+匿名命名空间告诉编译器，其中的内容只在当前翻译单元内可见，从而允许编译器做更多优化，并减少名字冲突的可能性。
+
+3.4
+1.
+这个checker对于文件描述符保存了两个状态Opened和Closed，从文件描述符到其状态的映射关系存在一张StreamMap表中。
+2.
+在调用fopen()或fclose()时状态改变。
+3.
+在调用一个函数后，进行PostCall检查，如果是fopen，且文件打开成功，将一个标记文件已打开的新结点加入ExplodedGraph。
+在调用一个函数前，进行PreCall检查，如果是fclose，且文件之前没有被关闭过，将一个标记文件已关闭的新结点加入ExplodedGraph，否则报告错误“多次关闭同一文件”。
+当文件描述符离开作用域时，检查它们是否处于未关闭状态。如果是，报告错误，并将该文件描述符的状态从程序状态中移除。
+当分析器无法追踪一个文件指针的状态时，将其从程序状态中移除。
+
+4.
+函数SimpleStreamChecker::checkPointerEscape实现的功能是，当分析器无法追踪一个文件描述符时（例如当它的指针被作为全局变量，或者作为参数被传入一个分析器无法追踪的函数），将其从程序状态中移除。
+该函数的逻辑是，如果是将指针传入了一个函数，且该函数不会对文件进行关闭操作，此时不做处理。否则，对于每一个无法追踪的符号，将它从StreamMap表中移除，返回移除后的状态。
+
+5.
+可以识别的bug：未关闭已打开的文件、多次关闭同一文件
+不能识别的bug：打开文件前使用文件、关闭文件后使用文件、关闭未曾打开的文件
+
+3.5
+1.
+增加一个checker需要在目录lib/StaticAnalyzer/Checkers/下添加该checker的实现文件***Checker.cpp，其中加入如下代码
+“void ento::registerSimpleStreamChecker(CheckerManager &mgr) {
+  mgr.registerChecker<SimpleStreamChecker>();
+}”
+？？？
+最后向lib/StaticAnalyzer/Checkers/CMakeLists.txt添加该checker的源文件。
