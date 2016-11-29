@@ -1,16 +1,18 @@
 3.1 简要说明test.c、AST.svg、CFG.svg、和ExplodedGraph.svg之间的联系与区别
-AST(抽象语法树)是源代码的抽象语法结构的树状表现形式。树中的每个结点表示源代码中的一种语法构造，其中去除了源语言中的一些细节。
-CFG和ExplodedGraph是数据流分析中采用的两种数据结构。
-CFG（控制流图）是用图的结构对一个程序在运行时可能走的所有流程的一种表示。在控制流图中，每个结点表示一个基本块（基本块是指代码中顺序执行的一个部分，控制流只能从基本块的第一条语句进入，从最后一条语句出去），每条边是有向的，代表控制转移。
-ExplodedGraph（扩展图）是一种表示路径敏感的数据流分析的方法。路径敏感的数据流流分析在分析过程中维持路径信息（例如条件转移指令的条件），在后面的分析中能够根据这些信息将经过不同路径到达的程序点区分开。
-CFG和ExplodedGraph之间的区别是，CFG是用于表示流不敏感或流敏感的分析的方式，而ExplodedGraph是表示路径敏感的分析的方式。在CFG中，每个结点表示一个基本块，而在ExplodedGraph中，每个结点表示一个（程序点，状态）对，其中记录了到达该结点时所走过的路径上的信息。
+    AST(抽象语法树)是源代码的抽象语法结构的树状表现形式，是分析树的简化。树中的每个结点表示源代码中的一种语法构造，其中去除了源语言中的一些细节。
+    CFG和ExplodedGraph是数据流分析中采用的两种数据结构。
+    CFG（控制流图）是用图的结构对一个程序在运行时可能走的所有流程的一种表示。在控制流图中，每个结点表示一个基本块（基本块是指代码中顺序执行的一个部分，控制流只能从基本块的第一条语句进入，从最后一条语句出去），每条边是有向的，代表控制转移。
+    ExplodedGraph（扩展图）是一种表示路径敏感的数据流分析的方法。路径敏感的数据流流分析在分析过程中维持路径信息（例如条件转移指令的条件）。在ExplodedGraph中，能够根据这些路径信息将经过不同路径到达的程序点区分开。
+    CFG和ExplodedGraph之间的区别是，CFG是用于表示流不敏感或流敏感的分析的方式，而ExplodedGraph是表示路径敏感的分析的方式。在CFG中，每个结点表示一个基本块，而在ExplodedGraph中，每个结点表示一个（程序点，状态）对，其中记录了到达该结点时所走过的路径上的信息。
 
 
 3.2
 1.Checher 对于程序的分析主要是在AST上还是在CFG上进行？
 CFG
+
 2.Checker在分析程序时需要记录程序状态，这些状态一般保存在哪里？
 <program point, program state> 对一起保存在ExplodedGraph的节点中。
+
 3.简要解释分析器在分析下面程序片段时的过程，在过程中产生了哪些symbolic values?它们的关系是什么？
 在分析第一行“int x = 3, y = 4;”时，创建引用常数3的SVal，创建引用x的左值（MemRegion）的SVal，然后在store中将两者关联，再创建引用常数4的SVal，创建引用y的MemRegion的SVal，然后在store中将两者关联。store是从抽象存储位置到抽象符号值的映射。
 在分析第二行“int *p = &x;”时，创建引用x的左值(MemRegion)的Sval，创建引用p的MemRegion的Sval，然后在store中将两者关联（p的MemRegion映射到的值是x的MemRegion）。
@@ -18,13 +20,13 @@ CFG
 
 
 3.3
-1.
+1.LLVM 大量使用了 C++11/14的智能指针，请简要描述几种智能指针的特点、使用场合，如有疑问也可以记录在报告中。
 C++11/14的智能指针有unique_ptr、shared_ptr、weak_ptr三种。
 unique_ptr的特点是在离开作用域时能自动释放所指向的对象的内存空间，且两个unique_ptr不能指向同一个对象。不能将一个unique_ptr赋值给另一个，但两个unique_ptr之间可以转移对象的拥有权。使用unique_ptr可为处理拥有动态寿命的函数和对象提供额外保护。
 与unique_ptr的独占性不同，多个shared_ptr可以共用一个对象，由最后退出作用域的shared_ptr负责对象的释放，因此需要引用计数。但它会在链式结构中遇到循环引用的问题。
 weak_ptr一般需要搭配shared_ptr使用，它和shared_ptr的区别在于它不会增加引用计数，也不能直接进行对象的存取，主要用来监控与之搭配的shared_ptr的状况。由于weak_ptr不增加引用计数，因此当shared_ptr退出后，对象即被释放。使用weak_ptr进行对象存取时，要先用lock()方法将它转换为一个shared_ptr。
 
-2.
+2.LLVM 不使用 C++ 的运行时类型推断（RTTI），理由是什么？LLVM 提供了怎样的机制来代替它？
 LLVM不使用C++的RTTI是因为它有缺陷，主要是dynamic_cast<>只能用于有虚函数表的类，而且它违背了C++的“you only pay for what you use”原则，导致可执行程序过大。
 LLVM提供的替代机制有：
 isa<>：判断指针或引用是否指向一个指定的类的实例，返回true或false。
@@ -34,11 +36,12 @@ cast_or_null<>：类似于cast<>，但可以接受空指针作为参数。
 dyn_cast_or_null<>：类似于dyn_cast<>，但可以接受空指针作为参数。
 以上五种模板可以被用于任何类，而不只是有虚函数的类。
 
-3.
-写一个函数，它的参数既可以是数组，也可以是std::vector，那么声明参数为auto类型。
+3.如果你想写一个函数，它的参数既可以是数组，也可以是std::vector，那么你可以声明该参数为什么类型？如果你希望同时接受 C 风格字符串和 std::string 呢？
+写一个函数，它的参数既可以是数组，也可以是vector，那么声明参数为"llvm::ArrayRef &"类型。
+写一个函数，它的参数既可以是c风格的字符串，也可以是std::string，那么声明参数为"llvm::StringRef"类型。
 
-4.
-匿名命名空间告诉编译器，其中的内容只在当前翻译单元内可见，从而允许编译器做更多优化，并减少名字冲突的可能性。
+4.你有时会在cpp文件中看到匿名命名空间的使用，这是出于什么考虑？
+定义一个匿名命名空间时，不需要指定命名空间的名字，编译器会为该命名空间生成一个唯一的名字和一条using指令，也会将该命名空间内部的名字进行转换。此外，匿名命名空间告诉编译器，其中的内容只在当前翻译单元内可见，即命名空间及其内部对象的名字具有internal链接属性，从而允许编译器做更多优化，并减少名字冲突的可能性。
 
 
 3.4
@@ -46,7 +49,7 @@ dyn_cast_or_null<>：类似于dyn_cast<>，但可以接受空指针作为参数�
 这个checker对于文件描述符保存了两个状态Opened和Closed，从文件描述符到其状态的映射关系存在一张StreamMap表中。
 
 2.状态在哪些时候会发生变化？
-在调用fopen()或fclose()时状态改变。
+在调用fopen()成功之后或调用fclose()之前状态改变。
 
 3.在哪些地方有对状态的检查？
 在调用一个函数后，进行PostCall检查，如果是fopen，且文件打开成功，将一个标记文件已打开的新结点加入ExplodedGraph。
@@ -61,7 +64,7 @@ dyn_cast_or_null<>：类似于dyn_cast<>，但可以接受空指针作为参数�
 5.
 可以识别的bug：未关闭已打开的文件、多次关闭同一文件
 不能识别的bug：打开文件前使用文件、关闭文件后使用文件、关闭未曾打开的文件
-进行测试：在test3.4.5.c中，fp1、fp2、fp3是三个文件指针。当fp1所指向的文件关闭后再使用fp1进行文件读写，分析器没有检测出这个错误。在使用fp2前没有通过fopen打开文件，分析器报告warning "Function call argument is an uninitialized value"，但这不是由SimpleStreamChecker实现的错误检查。在对fp3调用fclose之前没有调用fopen打开过文件，分析器也没有检测出这个错误。
+进行测试：在测试样例test3.4.5.c中，fp1、fp2、fp3是三个文件指针，均被初始化为NULL。当fp1所指向的文件关闭后再使用fp1进行文件读写，在使用fp2前没有通过fopen打开文件，以及在对fp3调用fclose之前没有调用fopen打开过文件，分析器没有检测出这些错误。
 
 
 3.5
@@ -75,5 +78,8 @@ void ento::registerSimpleStreamChecker(CheckerManager &mgr) {
 （3）在Checkers.td文件中，为该checker选择一个合适的ParentPackage，将该checker的信息放入其中。
 （4）向lib/StaticAnalyzer/Checkers/CMakeLists.txt添加该checker的源文件。
 
+2.阅读clang/include/clang/StaticAnalyzer/Checkers/CMakeLists.txt，解释其中的 clang_tablegen 函数的作用。
+该函数读取Checkers.td文件，生成Checkers.inc文件，并在makefile文件中添加目标ClangSACheckers。
+
 3..td文件在clang中出现多次，比如这里的clang/include/clang/StaticAnalyzer/Checkers/Checkers.td。这类文件的作用是什么？它是怎样生成C++头文件或源文件的？这个机制有什么好处？
-.td文件包含TableGen代码，TableGen是一种用来描述专门领域的记录信息的语言，它是llvm的项目之一。通过TableGen，可以对输入的.td文件进行语法分析，将其转换为一种内部表示并交给专门领域的后端处理。在clang中，它用来产生C/C++文件。这样做的好处是
+.td文件包含TableGen代码，TableGen是一种用来描述专门领域的记录信息的语言，它是llvm的项目之一。通过TableGen，可以对输入的.td文件进行语法分析，将其转换为一种内部表示并交给专门领域的后端处理。在clang中，它用来读取.td文件并生成.inc文件，但是.inc文件如何被C/C++代码使用还不清楚。这样做的好处是不仅减少了代码重复，增加了可读性，而且减少了bug产生的可能性，更易于开发和维护。
