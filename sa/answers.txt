@@ -11,75 +11,103 @@
 CFG
 
 2.Checker在分析程序时需要记录程序状态，这些状态一般保存在哪里？
-<program point, program state> 对一起保存在ExplodedGraph的节点中。
+    程序状态用ProgramState来记录，<program point, program state> 对一起保存在ExplodedGraph的节点中。
+    ProgramState由三部分组成：
+    （1）Environment：从源代码表达式到抽象符号值的映射；
+    （2）Store：从内存位置到抽象符号值的映射；
+    （3）GenericDataMap：对抽象符号值施加的约束关系。
+    其中，Checker部分的状态保存在GenericDataMap中。
 
 3.简要解释分析器在分析下面程序片段时的过程，在过程中产生了哪些symbolic values?它们的关系是什么？
-在分析第一行“int x = 3, y = 4;”时，创建引用常数3的SVal，创建引用x的左值（MemRegion）的SVal，然后在store中将两者关联，再创建引用常数4的SVal，创建引用y的MemRegion的SVal，然后在store中将两者关联。store是从抽象存储位置到抽象符号值的映射。
-在分析第二行“int *p = &x;”时，创建引用x的左值(MemRegion)的Sval，创建引用p的MemRegion的Sval，然后在store中将两者关联（p的MemRegion映射到的值是x的MemRegion）。
-在分析第三行“int z = *(p + 1);”时，先创建引用p的值的SVal和引用常数1的SVal，然后用这两个子表达式的SVal构造一个代表p+1的值的SVal，记为$1。接着构造store中与$1相关联的符号值$2，最后创建引用z的左值的Sval，并在store中将它与$2关联。
+    在分析第一行“int x = 3, y = 4;”时，创建引用常数3的SVal $1，创建引用x的左值（MemRegion）的SVal $2，然后在Store中将两者关联，再创建引用常数4的SVal $3，创建引用y的MemRegion的SVal $4，然后在Store中将两者关联。Store是从抽象存储位置到抽象符号值的映射。
+    在分析第二行“int *p = &x;”时，创建引用p的MemRegion的Sval $5，然后在Store中将$5与$2关联（p的MemRegion映射到的值是x的MemRegion）。
+    在分析第三行“int z = *(p + 1);”时，先获取表示p的MemRegion的SVal $5，进行左值到右值的转换，得到表示p的右值的SVal $6。接下来创建引用常数1的SVal $7，然后用这两个子表达式的SVal构造一个代表p+1的值的SVal $8。接着构造SVal $9，表示存储位置为$8的值，最后创建引用z的左值的Sval $10，并在Store中将它与$9关联。
 
 
 3.3
 1.LLVM 大量使用了 C++11/14的智能指针，请简要描述几种智能指针的特点、使用场合，如有疑问也可以记录在报告中。
-C++11/14的智能指针有unique_ptr、shared_ptr、weak_ptr三种。
-unique_ptr的特点是在离开作用域时能自动释放所指向的对象的内存空间，且两个unique_ptr不能指向同一个对象。不能将一个unique_ptr赋值给另一个，但两个unique_ptr之间可以转移对象的拥有权。使用unique_ptr可为处理拥有动态寿命的函数和对象提供额外保护。
-与unique_ptr的独占性不同，多个shared_ptr可以共用一个对象，由最后退出作用域的shared_ptr负责对象的释放，因此需要引用计数。但它会在链式结构中遇到循环引用的问题。
-weak_ptr一般需要搭配shared_ptr使用，它和shared_ptr的区别在于它不会增加引用计数，也不能直接进行对象的存取，主要用来监控与之搭配的shared_ptr的状况。由于weak_ptr不增加引用计数，因此当shared_ptr退出后，对象即被释放。使用weak_ptr进行对象存取时，要先用lock()方法将它转换为一个shared_ptr。
+    C++11/14的智能指针有unique_ptr、shared_ptr、weak_ptr三种。
+    unique_ptr的特点是在离开作用域时能自动释放所指向的对象的内存空间，且两个unique_ptr不能指向同一个对象。不能将一个unique_ptr赋值给另一个，但两个unique_ptr之间可以转移对象的拥有权。使用unique_ptr可为处理拥有动态寿命的函数和对象提供额外保护。
+    与unique_ptr的独占性不同，多个shared_ptr可以共用一个对象，由最后退出作用域的shared_ptr负责对象的释放，因此需要引用计数。但它会在链式结构中遇到循环引用的问题。
+    weak_ptr一般需要搭配shared_ptr使用，它和shared_ptr的区别在于它不会增加引用计数，也不能直接进行对象的存取，主要用来监控与之搭配的shared_ptr的状况。由于weak_ptr不增加引用计数，因此当shared_ptr退出后，对象即被释放。使用weak_ptr进行对象存取时，要先用lock()方法将它转换为一个shared_ptr。
 
 2.LLVM 不使用 C++ 的运行时类型推断（RTTI），理由是什么？LLVM 提供了怎样的机制来代替它？
-LLVM不使用C++的RTTI是因为它有缺陷，主要是dynamic_cast<>只能用于有虚函数表的类，而且它违背了C++的“you only pay for what you use”原则，导致可执行程序过大。
-LLVM提供的替代机制有：
-isa<>：判断指针或引用是否指向一个指定的类的实例，返回true或false。
-cast<>：将一个类型为指向基类的指针或引用转化为指向派生类的实例的指针或引用。由程序员保证其作用的对象可以正确地进行类型转化，否则引发断言错误。
-dyn_cast<>：其行为类似于C++中的dynamic_cast<>，先检查指针所指的对象是否具有正确的类型，如果是，进行基类到派生类的指针类型转换，否则返回空指针。相当于isa<>测试后跟着一条cast<>语句。它不支持引用的转换。
-cast_or_null<>：类似于cast<>，但可以接受空指针作为参数。
-dyn_cast_or_null<>：类似于dyn_cast<>，但可以接受空指针作为参数。
-以上五种模板可以被用于任何类，而不只是有虚函数的类。
+    LLVM不使用C++的RTTI是因为它有缺陷，主要是dynamic_cast<>只能用于有虚函数表的类，而且它违背了C++的“you only pay for what you use”原则，导致可执行程序过大。
+    LLVM提供的替代机制有：
+    isa<>：判断指针或引用是否指向一个指定的类的实例，返回true或false。
+    cast<>：将一个类型为指向基类的指针或引用转化为指向派生类的实例的指针或引用。由程序员保证其作用的对象可以正确地进行类型转化，否则引发断言错误。
+    dyn_cast<>：其行为类似于C++中的dynamic_cast<>，先检查指针所指的对象是否具有正确的类型，如果是，进行基类到派生类的指针类型转换，否则返回空指针。相当于isa<>测试后跟着一条cast<>语句。它不支持引用的转换。
+    cast_or_null<>：类似于cast<>，但可以接受空指针作为参数。
+    dyn_cast_or_null<>：类似于dyn_cast<>，但可以接受空指针作为参数。
+    以上五种模板可以被用于任何类，而不只是有虚函数的类。
 
 3.如果你想写一个函数，它的参数既可以是数组，也可以是std::vector，那么你可以声明该参数为什么类型？如果你希望同时接受 C 风格字符串和 std::string 呢？
-写一个函数，它的参数既可以是数组，也可以是vector，那么声明参数为"llvm::ArrayRef &"类型。
-写一个函数，它的参数既可以是c风格的字符串，也可以是std::string，那么声明参数为"llvm::StringRef"类型。
+    写一个函数，它的参数既可以是数组，也可以是vector，那么声明参数为"llvm::ArrayRef"类型。
+    写一个函数，它的参数既可以是c风格的字符串，也可以是std::string，那么声明参数为"llvm::StringRef"类型。
 
 4.你有时会在cpp文件中看到匿名命名空间的使用，这是出于什么考虑？
-定义一个匿名命名空间时，不需要指定命名空间的名字，编译器会为该命名空间生成一个唯一的名字和一条using指令，也会将该命名空间内部的名字进行转换。此外，匿名命名空间告诉编译器，其中的内容只在当前翻译单元内可见，即命名空间及其内部对象的名字具有internal链接属性，从而允许编译器做更多优化，并减少名字冲突的可能性。
+    定义一个匿名命名空间时，不需要指定命名空间的名字，编译器会为该命名空间生成一个唯一的名字和一条using指令，也会将该命名空间内部的名字进行转换。此外，匿名命名空间告诉编译器，其中的内容只在当前翻译单元内可见，即命名空间及其内部对象的名字具有internal链接属性，从而允许编译器做更多优化，并减少名字冲突的可能性。
 
 
 3.4
 1.这个 checker 对于什么对象保存了哪些状态？保存在哪里？
-这个checker对于文件描述符保存了两个状态Opened和Closed，从文件描述符到其状态的映射关系存在一张StreamMap表中。
+    这个checker对于文件描述符保存了两个状态Opened和Closed，从文件描述符到其状态的映射关系存在一张StreamMap表中。该表存在上文提到的GenericDataMap中。
 
 2.状态在哪些时候会发生变化？
-在调用fopen()成功之后或调用fclose()之前状态改变。
+    （1）在调用fopen()成功之后，文件描述符的相应状态设为Opened。
+    （2）在正确调用fclose()之前，状态变为Closed。
+    （3）当文件打开后还未关闭，且文件描述符变为dead symbol（例如离开作用域）时，将状态从StreamMap表中移除。
+    （4）当发生pointer escape时，除了一种情形外（见第4题），将状态从StreamMap中移除。
 
 3.在哪些地方有对状态的检查？
-在调用一个函数后，进行PostCall检查，如果是fopen，且文件打开成功，将一个标记文件已打开的新结点加入ExplodedGraph。
-在调用一个函数前，进行PreCall检查，如果是fclose，且文件之前没有被关闭过，将一个标记文件已关闭的新结点加入ExplodedGraph，否则报告错误“多次关闭同一文件”。
-当文件描述符离开作用域时，检查它们是否处于未关闭状态。如果是，报告错误，并将该文件描述符的状态从程序状态中移除。
-当分析器无法追踪一个文件指针的状态时，将其从程序状态中移除。
+    在调用一个函数后，进行PostCall检查，如果是fopen，且文件打开成功，将一个标记文件已打开的新结点加入ExplodedGraph。
+    在调用一个函数前，进行PreCall检查，如果是fclose，且文件之前没有被关闭过，将一个标记文件已关闭的新结点加入ExplodedGraph，否则报告错误“多次关闭同一文件”。
+    当文件描述符离开作用域时，检查它们是否处于未关闭状态。如果是，报告Leak错误，并将该文件描述符的状态从程序状态中移除。
+    当发生pointer escape，分析器无法追踪一个文件指针的状态时，将其从程序状态中移除。
 
 4.函数SimpleStreamChecker::checkPointerEscape的逻辑是怎样的？实现了什么功能？用在什么地方？
-函数SimpleStreamChecker::checkPointerEscape实现的功能是，当分析器无法追踪一个文件描述符时（例如当它的指针被作为全局变量，或者作为参数被传入一个分析器无法追踪的函数），将其从程序状态中移除。
-该函数的逻辑是，如果是将指针传入了一个函数，且该函数不会对文件进行关闭操作，此时不做处理。否则，对于每一个无法追踪的符号，将它从StreamMap表中移除，返回移除后的状态。
+    函数SimpleStreamChecker::checkPointerEscape实现的功能是，当分析器无法追踪一个文件描述符时（例如当它被赋值给一个全局变量，或者作为参数被传入一个分析器无法追踪的函数），将其从程序状态中移除。
+    该函数的逻辑是，首先对4种escape类型之一进行判断：如果是将指针传入了一个函数，且该函数不会对文件进行关闭操作，此时不做处理，返回原状态。否则，对于每一个无法追踪的符号，将它从StreamMap表中移除，并返回移除后的状态。
 
-5.
-可以识别的bug：未关闭已打开的文件、多次关闭同一文件
-不能识别的bug：打开文件前使用文件、关闭文件后使用文件、关闭未曾打开的文件
-进行测试：在测试样例test3.4.5.c中，fp1、fp2、fp3是三个文件指针，均被初始化为NULL。当fp1所指向的文件关闭后再使用fp1进行文件读写，在使用fp2前没有通过fopen打开文件，以及在对fp3调用fclose之前没有调用fopen打开过文件，分析器没有检测出这些错误。
+5.根据以上认识，你认为这个简单的checker能够识别出怎样的bug？又有哪些局限性？请给出测试程序及相关的说明。
+    可以识别的bug：未关闭已打开的文件、多次关闭同一文件
+    不能识别的bug：打开文件前使用文件、关闭文件后使用文件、关闭未曾打开的文件
+    此外，它还有一些Checker中普遍存在的缺陷，包括在某些情况下（例如文件指针被作为参数传递给一个无法追踪的函数）无法继续分析，以及在循环次数较大时无法模拟等。
+    进行测试：
+    在测试样例test1.c中，fp1、fp2、fp3是三个文件指针，均被初始化为NULL。当fp1所指向的文件关闭后再使用fp1进行文件读写，在使用fp2前没有通过fopen打开文件，以及在对fp3调用fclose之前没有调用fopen打开过文件，分析器没有检测出这些错误。
+    在test2.c中，打开一个文件，在一个较多次数的循环中进行读写，之后未关闭文件，分析器没有检测出Leak。
+    此外，在test3.c中，还检测到错误提示信息不够准确，例如当有两个文件指针fp1、fp2，fp1所指向的文件被正确地打开关闭，而fp2指向的文件打开后未关闭，此时虽然检测出 potential resource leak，但错误信息却显示是在“fclose(fp1)”这一行。
+
 
 
 3.5
 1.增加一个checker需要增加哪些文件？需要对哪些文件进行修改？
-增加一个checker需要
-（1）在目录lib/StaticAnalyzer/Checkers/下添加该checker的实现文件***Checker.cpp。
-（2）在上述cpp文件中加入如下注册代码
-void ento::registerSimpleStreamChecker(CheckerManager &mgr) {
-  mgr.registerChecker<SimpleStreamChecker>();
-}
-（3）在Checkers.td文件中，为该checker选择一个合适的ParentPackage，将该checker的信息放入其中。
-（4）向lib/StaticAnalyzer/Checkers/CMakeLists.txt添加该checker的源文件。
+    增加一个checker需要
+    （1）在目录lib/StaticAnalyzer/Checkers/下添加该checker的实现文件***Checker.cpp。
+    （2）在上述cpp文件中加入如下注册代码
+    void ento::registerSimpleStreamChecker(CheckerManager &mgr) {
+      mgr.registerChecker<SimpleStreamChecker>();
+    }
+    （3）在Checkers.td文件中，为该checker选择一个合适的ParentPackage，将该checker的信息放入其中。
+    （4）向lib/StaticAnalyzer/Checkers/CMakeLists.txt添加该checker的源文件。
 
 2.阅读clang/include/clang/StaticAnalyzer/Checkers/CMakeLists.txt，解释其中的 clang_tablegen 函数的作用。
-该函数读取Checkers.td文件，生成Checkers.inc文件，并在makefile文件中添加目标ClangSACheckers。
+    该函数调用tablegen读取Checkers.td文件，生成Checkers.inc文件，且生成一个名为ClangSACheckers的custom target。
 
 3..td文件在clang中出现多次，比如这里的clang/include/clang/StaticAnalyzer/Checkers/Checkers.td。这类文件的作用是什么？它是怎样生成C++头文件或源文件的？这个机制有什么好处？
-.td文件包含TableGen代码，TableGen是一种用来描述专门领域的记录信息的语言，它是llvm的项目之一。通过TableGen，可以对输入的.td文件进行语法分析，将其转换为一种内部表示并交给专门领域的后端处理。在clang中，它用来读取.td文件并生成.inc文件，但是.inc文件如何被C/C++代码使用还不清楚。这样做的好处是不仅减少了代码重复，增加了可读性，而且减少了bug产生的可能性，更易于开发和维护。
+    .td是TableGen定义的文件格式，文件包含TableGen代码。TableGen是一种用来描述专门领域的记录信息的语言，它是llvm的项目之一。TableGen文件（即.td文件）是由一系列记录组成的，通过TableGen，可以对输入的.td文件进行语法分析，将其转换为一种内部表示，并交给专门的后端去处理。在Checkers.td的例子中，用TableGen来读取Checkers.td文件并生成Checkers.inc文件，然后在C++头文件/源文件中include该.inc文件以使用其中的信息。例如，在ClangCheckers.cpp文件中，通过include该Checkers.inc文件，只用一条宏，就完成了众多Checker的注册。
+    这样做的好处是不仅减少了代码重复，增加了可读性，而且减少了bug产生的可能性，更易于开发和维护。
+
+
+扩展要求：（未完待续）
+1.除了这些缺陷以外, clang静态分析器还能检测哪些缺陷? 
+    clang静态分析器目前的缺陷还有：
+    （1）显式模拟更多标准库函数
+    （2）模拟c++临时变量
+    （3）模拟c++异常处理
+    （4）更精确地模拟new、delete
+    （5）借助cast更精确地推断类型信息
+    （6）当在某条路径上两个符号经过比较判定为相等时，将这两个符号值统一（重命名）
+    （7）提高streamchecker的能力，支持对更多API的检查
+    （8）扩展MallocPessimistic的能力，使其能够对定制的内存分配/释放函数或进行了控制权移交的函数进行推断
+    （9）迭代器合法性检查
