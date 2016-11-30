@@ -21,7 +21,7 @@ CFG
 3.简要解释分析器在分析下面程序片段时的过程，在过程中产生了哪些symbolic values?它们的关系是什么？
     在分析第一行“int x = 3, y = 4;”时，创建引用常数3的SVal $1，创建引用x的左值（MemRegion）的SVal $2，然后在Store中将两者关联，再创建引用常数4的SVal $3，创建引用y的MemRegion的SVal $4，然后在Store中将两者关联。Store是从抽象存储位置到抽象符号值的映射。
     在分析第二行“int *p = &x;”时，创建引用p的MemRegion的Sval $5，然后在Store中将$5与$2关联（p的MemRegion映射到的值是x的MemRegion）。
-    在分析第三行“int z = *(p + 1);”时，先获取表示p的MemRegion的SVal $5，进行左值到右值的转换，得到表示p的右值的SVal $6。接下来创建引用常数1的SVal $7，然后用这两个子表达式的SVal构造一个代表p+1的值的SVal $8。接着构造SVal $9，表示存储位置为$8的值，最后创建引用z的左值的Sval $10，并在Store中将它与$9关联。
+    在分析第三行“int z = *(p + 1);”时，先获取表示p的MemRegion的SVal $5，进行左值到右值的转换，得到表示p的右值的SVal $2。接下来创建引用常数1的SVal $6，然后用这两个子表达式的SVal构造一个代表p+1的值的SVal $7。接着构造SVal $8，表示存储在内存位置$7的值，最后创建引用z的MemRegion的Sval $9，并在Store中将它与$8关联。
 
 
 3.3
@@ -89,10 +89,10 @@ CFG
       mgr.registerChecker<SimpleStreamChecker>();
     }
     （3）在Checkers.td文件中，为该checker选择一个合适的ParentPackage，将该checker的信息放入其中。
-    （4）向lib/StaticAnalyzer/Checkers/CMakeLists.txt添加该checker的源文件。
+    （4）向lib/StaticAnalyzer/Checkers/CMakeLists.txt添加该checker的源文件信息。
 
 2.阅读clang/include/clang/StaticAnalyzer/Checkers/CMakeLists.txt，解释其中的 clang_tablegen 函数的作用。
-    该函数调用tablegen读取Checkers.td文件，生成Checkers.inc文件，且生成一个名为ClangSACheckers的custom target。
+    该函数调用tablegen读取Checkers.td文件，生成Checkers.inc文件，且生成一个名为ClangSACheckers的cmake custom target。
 
 3..td文件在clang中出现多次，比如这里的clang/include/clang/StaticAnalyzer/Checkers/Checkers.td。这类文件的作用是什么？它是怎样生成C++头文件或源文件的？这个机制有什么好处？
     .td是TableGen定义的文件格式，文件包含TableGen代码。TableGen是一种用来描述专门领域的记录信息的语言，它是llvm的项目之一。TableGen文件（即.td文件）是由一系列记录组成的，通过TableGen，可以对输入的.td文件进行语法分析，将其转换为一种内部表示，并交给专门的后端去处理。在Checkers.td的例子中，用TableGen来读取Checkers.td文件并生成Checkers.inc文件，然后在C++头文件/源文件中include该.inc文件以使用其中的信息。例如，在ClangCheckers.cpp文件中，通过include该Checkers.inc文件，只用一条宏，就完成了众多Checker的注册。
