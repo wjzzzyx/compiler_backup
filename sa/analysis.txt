@@ -1,0 +1,40 @@
+扩展要求：
+1.除了这些缺陷以外, clang静态分析器还有哪些缺陷? 
+    clang官网给出的静态分析器目前的缺陷还有：
+    （1）显式模拟更多标准库函数
+    （2）模拟c++临时变量
+    （3）模拟c++异常处理
+    （4）更精确地模拟new、delete
+    （5）借助cast更精确地推断类型信息
+    （6）当在某条路径上两个符号经过比较判定为相等时，将这两个符号值统一（重命名）
+    （7）提高streamchecker的能力，支持对更多API的检查
+    （8）扩展MallocPessimistic的能力，使其能够对定制的内存分配/释放函数或进行了控制权移交的函数进行推断
+    （9）迭代器合法性检查
+
+在本次实验中，我决定对StreamChecker进行分析，并对它作了改进
+1.
+    StreamChecker检查流文件操作（包括fopen,fclose,fread,fwrite,fseek,ftell,rewind,fgetpos,fsetpos,clearerr,feof,ferror和fileno）。它能检测的错误类型有四种，分别是（1）打开文件后没有关闭造成的资源泄漏，（2）重复关闭同一文件，（3）文件指针可能为空时进行文件操作，（4）Fseek参数错误。
+    经测试，StreamChecker能检查这类缺陷。
+
+2.检查能力到什么程度？
+    对于该Checker定义的四种错误类型，没有发现检测不出来的情况。但该Checker的检错能力也仅限于这几种错误类型。
+
+3.检查的实现机制是什么？
+    源码位置：llvm/tools/clang/lib/StaticAnalyzer/Checkers/StreamChecker.cpp
+    首先，和SimpleStreamChecker类似，定义了一个StreamState类用来表示文件描述符的状态，但在StreamChecker中，每个文件描述符可以有四种状态，分别是"Opened""Closed""OpenFailed""Escaped"。
+    对于1中列出的每一种流文件操作，在StreamChecker中，都定义了相应的一个函数去检测它，但其中大部分函数只是简单地调用了CheckNullStream函数去检测文件描述符是否为空。真正实现对上述四种错误类型检查的是四个函数：checkDeadSymbols、CheckDoubleClose、CheckNullStream和Fseek。
+    checkDeadSymbols函数的做法是，对每一个dead symbol，去StreamMap表中检查，如果它在表中且状态为Opened，就报告"Resource Leak"错误。
+    CheckDoubleClose函数的做法是，如果函数调用中的文件描述符在StreamMap表中，且状态为Closed，则报告"double fclose"错误。CheckDoubleClose函数在用于检测fclose的函数Fclose中被调用。
+    CheckNullStream函数的做法是，首先判断文件描述符应当是一个DefinedSVal。然后，去考察当前路径上对该文件描述符施加的限制，具体做法是用一对程序状态<stateNotNull, stateNull>去接收ConstraintManager::assumeDual函数的返回值，如果某条路径上文件描述符为NULL，则stateNotNull将为假，stateNull将为真，此时报告"NULL stream pointer"错误。
+
+5.
+    注：以下内容是与王宇飞合作完成的
+    StreamChecker有很多可以改进的地方。在本实验中，我们决定做如下改进：
+    （1）为该Checker增添对更多文件操作函数的检测，如freopen，fscanf，fprintf，fputc，fgetc，fputs，fgets等。
+    （2）进一步判断对某文件进行的读写操作是否与打开文件时的模式一致。例如，以
+        FILE *fp = fopen("foo.txt", "r");
+打开文件后，不能进行
+        fprintf(fp, "a");
+操作。
+    具体的说明见checker.txt。源码在PB14011008Checker.cpp中。
+
