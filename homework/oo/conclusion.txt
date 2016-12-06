@@ -1,0 +1,30 @@
+    编译环境g++ (Ubuntu 5.4.0-6ubuntu1~16.04.2) 5.4.0 20160609
+
+    对多重继承的diamond problem进行测试，确定数据分配方式。
+    在程序test_multiple_inheritences.cpp中，类B、类C继承自类A，而类D继承自B、C。类A、B、C中各自有属性int a、int b、int c。因此，类D中也会有属性a、b、c。且类D中也定义了自己的属性int d。
+    在main函数中，创建D的对象d。
+    用gcc编译，当试图获取d.a时，编译器报告错误：
+    error: request for member ‘a’ is ambiguous
+    于是用A::a限定a，发现还是不行：
+    error: ‘A’ is an ambiguous base of ‘D'
+    但用B::a和C::a限定a是可以的。
+    将d中各属性的地址输出进行观察：
+    multiple inheritence
+    address:
+    d.B::a : 321384560
+    d.C::a : 321384564
+    d.b : 321384568
+    d.c : 321384572
+    d.d : 321384576
+    可见在类D的对象中，B、C的继承自A的属性都会保留，且它们的地址是连续的。B、C的属性在D自身的属性之前。
+
+    在程序中同时定义了类E、F、G、H，它们之间的继承关系与A、B、C、D相同，不同之处在于F、G对E的继承是虚拟继承。定义类H的一个实例h，同样将h的各属性地址输出
+    virtual inheritance
+    address:
+    h.F::e : 140726492736352
+    h.G::e : 140726492736352
+    h.f : 140726492736328
+    h.g : 140726492736344
+    h.h : 140726492736348
+    可见类E中定义的属性e在h中只有一个副本。且在这个例子中，它被放在最后。
+
