@@ -925,7 +925,10 @@ operand neg_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "neg" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	ValuePrinter vp(*(env->cur_stream));
+	operand pos = e1->code(env);
+	operand neg = vp.sub(int_value(0), pos);
+	return neg;
 }
 
 operand lt_class::code(CgenEnvironment *env) 
@@ -933,7 +936,12 @@ operand lt_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "lt" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	ValuePrinter vp(*(env->cur_stream));
+	operand op1 = e1->code(env);
+	operand op2 = e2->code(env);
+	// assume op1 and op2 are integers ?
+	operand lt = vp.icmp(LT, op1, op2);
+	return lt;
 }
 
 operand eq_class::code(CgenEnvironment *env) 
@@ -941,7 +949,11 @@ operand eq_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "eq" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	ValuePrinter vp(*(env->cur_stream));
+	operand op1 = e1->code(env);
+	operand op2 = e2->code(env);
+	operand eq = vp.icmp(EQ, op1, op2);
+	return eq;
 }
 
 operand leq_class::code(CgenEnvironment *env) 
@@ -949,7 +961,11 @@ operand leq_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "leq" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	ValuePrinter vp(*(env->cur_stream));
+	operand op1 = e1->code(env);
+	operand op2 = e2->code(env);
+	operand le = vp.icmp(LE, op1, op2);
+	return le;
 }
 
 operand comp_class::code(CgenEnvironment *env) 
@@ -957,7 +973,11 @@ operand comp_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "complement" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	ValuePrinter vp(*(env->cur_stream));
+	// compute a boolean's complement by xor with true *
+	operand origin = e1->code(env);
+    operand comp = vp.xor_in(origin, bool_value(true, true));
+	return comp;
 }
 
 operand int_const_class::code(CgenEnvironment *env) 
