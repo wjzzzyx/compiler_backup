@@ -546,7 +546,7 @@ void CgenClassTable::code_module()
 	// This must be after code_module() since that emits constants
 	// needed by the code() method for expressions
 	CgenNode* mainNode = getMainmain(root());
-	mainNode->codeGenMainmain();
+	mainNode->codeGenMainmain(*ct_stream);    // the ostream must be passed
 #endif
 	code_main();
 
@@ -574,20 +574,43 @@ void CgenClassTable::code_classes(CgenNode *c)
 void CgenClassTable::code_main()
 {
 	// Define a function main that has no parameters and returns an i32
+    ValuePrinter vp(*ct_stream);
+	
+	string msg("Main_main() returned %d\n");
+	op_arr_type fmt_type(INT8, msg.length() + 1);
+	const_value fmt(fmt_type, msg, true);
 
+	vp.init_constant(".str", fmt);
+	op_arr_type fmt_addr_type(INT8_PTR, msg.length() + 1);
+	global_value fmt_addr(fmt_addr_type, ".str", fmt);
+
+    op_type i32_type(INT32);    // return value type
+	vector<op_type> main_null_argtypes;
+	vector<operand> main_null_args;
+	vp.define(*ct_stream, i32_type, "main", main_null_args);
 	// Define an entry basic block
-
+    vp.begin_block("entry");
 	// Call Main_main(). This returns int* for phase 1, Object for phase 2
-
+    operand tmp0 = vp.call(main_null_argtypes, i32_type, "Main_main", true, main_null_args);
 
 #ifndef MP3
 	// Get the address of the string "Main_main() returned %d\n" using
 	// getelementptr 
+    
+	operand tmp1 = vp.getelementptr(fmt_type, fmt_addr, int_value(0), int_value(0), INT8_PTR);
 
 	// Call printf with the string address of "Main_main() returned %d\n"
 	// and the return value of Main_main() as its arguments
-
+    vector<op_type> printf_argtypes;
+	printf_argtypes.push_back(op_type(INT8_PTR));
+	printf_argtypes.push_back(op_type(VAR_ARG));
+	vector<operand> printf_args;
+	printf_args.push_back(tmp1);
+	printf_args.push_back(tmp0);
+	vp.call(printf_argtypes, op_type(INT32), "printf", true, printf_args);
 	// Insert return 0
+	vp.ret(int_value(0));
+	vp.end_define();
 
 #else
 	// Phase 2
@@ -667,9 +690,9 @@ void CgenNode::layout_features()
 // 
 // code-gen function main() in class Main
 //
-void CgenNode::codeGenMainmain()
+void CgenNode::codeGenMainmain(ostream &out)
 {
-	ValuePrinter vp;
+	ValuePrinter vp(out);
 	// In Phase 1, this can only be class Main. Get method_class for main().
 	assert(std::string(this->name->get_string()) == std::string("Main"));
 	method_class* mainMethod = (method_class*) features->nth(features->first());
@@ -678,8 +701,12 @@ void CgenNode::codeGenMainmain()
 	// Generally what you need to do are:
 	// -- setup or create the environment, env, for translating this method
 	// -- invoke mainMethod->code(env) to translate the method
-	
-
+	CgenEnvironment env(out, this);
+	vector<operand> main_args;
+	vp.define(INT32, "Main_main", main_args);    // emit IR for function "define"
+	vp.begin_block("entry");    // emit IR for "entry:"
+    mainMethod->code(&env);    // emit IR for function body
+	vp.end_define();
 }
 
 #endif
@@ -784,7 +811,17 @@ void method_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "method" << endl;
 
 	// ADD CODE HERE
-
+    ValuePrinter vp(*(env->cur_stream));
+	operand retval = expr->code(env);    // emit code for the expression **
+	vp.ret(retval);    // emit "ret" instruction
+	//???
+	//Setup the abort call at the end of each method **
+    vp.begin_block("abort");
+    vector<op_type> abort_args_types;
+    vector<operand> abort_args;
+    operand ab_call = vp.call(abort_args_types, VOID, 
+                  "abort", true, abort_args);
+    vp.unreachable();
 }
 
 //
@@ -835,8 +872,12 @@ operand plus_class::code(CgenEnvironment *env)
 { 
 	if (cgen_debug) std::cerr << "plus" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
-	// MORE MEANINGFUL
-	return operand();
+	// MORE MEANINGFUL *
+	ValuePrinter vp(*(env->cur_stream));
+	operand op1 = e1->code(env);
+	operand op2 = e2->code(env);
+	operand res = vp.add(op1, op2);
+	return res;
 }
 
 operand sub_class::code(CgenEnvironment *env) 
@@ -844,7 +885,11 @@ operand sub_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "sub" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	ValuePrinter vp(*(env->cur_stream));
+	operand op1 = e1->code(env);
+	operand op2 = e2->code(env);
+	operand res = vp.sub(op1, op2);
+	return res;
 }
 
 operand mul_class::code(CgenEnvironment *env) 
@@ -852,7 +897,11 @@ operand mul_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "mul" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	ValuePrinter vp(*(env->cur_stream));
+	operand op1 = e1->code(env);
+	operand op2 = e2->code(env);
+	operand res = vp.mul(op1, op2);
+	return res;
 }
 
 operand divide_class::code(CgenEnvironment *env) 
@@ -860,7 +909,15 @@ operand divide_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "div" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	ValuePrinter vp(*(env->cur_stream));
+	operand op1 = e1->code(env);
+	operand op2 = e2->code(env);
+	// check if op2 is 0 **
+	operand z = vp.icmp(EQ, op2, int_value(0));
+	vp.branch_cond(z, "abort", "not_zero");
+	vp.begin_block("not_zero");
+	operand res = vp.div(op1, op2);
+	return res;
 }
 
 operand neg_class::code(CgenEnvironment *env) 
@@ -908,7 +965,9 @@ operand int_const_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "Integer Constant" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	int_value i(atoi(token->get_string()));    // what's the relation between int_value and int_const_class ?
+    
+	return i;
 }
 
 operand bool_const_class::code(CgenEnvironment *env) 
@@ -916,7 +975,8 @@ operand bool_const_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "Boolean Constant" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	bool_value b(val, false);
+	return b;
 }
 
 operand object_class::code(CgenEnvironment *env) 
