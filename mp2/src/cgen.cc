@@ -856,8 +856,11 @@ operand block_class::code(CgenEnvironment *env)
 { 
 	if (cgen_debug) std::cerr << "block" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
-	// MORE MEANINGFUL
-	return operand();
+	// MORE MEANINGFUL *
+	operand lastval;
+	for(int i = body->first(); body->more(i); i = body->next(i))
+		lastval = (body->nth(i))->code(env);
+	return lastval;
 }
 
 operand let_class::code(CgenEnvironment *env) 
@@ -865,7 +868,33 @@ operand let_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "let" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	ValuePrinter vp(*(env->cur_stream));
+	string id_name(identifier->get_string());    // get the name of the identifier
+	string type_name(type_decl->get_string());    // get the name of the type
+	op_type type;
+	if(type_name == "Bool")
+		type = INT1;
+	else if(type_name == "Int")
+		type = INT32;
+	operand initval = init->code(env);    // emit code for init expr
+	operand id(type, id_name);
+    // alloc memory for id
+	operand idaddr = vp.alloca_mem(type);
+	// bind variable name to memory location
+	env->add_local(identifier, idaddr);
+	// store init value into idaddr
+	if(initval.get_type().get_id() == EMPTY){
+		if(type.get_id() == INT1)
+			vp.store(bool_value(false, true), idaddr);
+		else if(type.get_id() == INT32)
+			vp.store(int_value(0), idaddr);
+	}
+	else
+		vp.store(initval, idaddr);
+	// return value of let is the return value of body expression
+	operand retval = body->code(env);
+	env->kill_local();    // is it necessary ?
+	return retval;
 }
 
 operand plus_class::code(CgenEnvironment *env) 
@@ -1004,7 +1033,12 @@ operand object_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "Object" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	ValuePrinter vp(*(env->cur_stream));
+	operand *p = env->lookup(name);
+	
+	// since variables are stored in heap of stack
+	// they need to be loaded into regs before use *
+	return vp.load((*p).get_type().get_deref_type(), *p);    // *
 }
 
 operand no_expr_class::code(CgenEnvironment *env) 
