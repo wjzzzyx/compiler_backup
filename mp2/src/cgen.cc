@@ -750,8 +750,8 @@ std::string CgenEnvironment::new_ok_label() {
 }
 const std::string CgenEnvironment::new_label(const std::string& prefix,
 		bool increment) {
+	block_count += increment;    //*
 	std::string suffix = itos(block_count);
-	block_count += increment;
 	return prefix + suffix;
 }
 
@@ -833,7 +833,11 @@ operand assign_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "assign" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	ValuePrinter vp(*(env->cur_stream));
+	operand val = expr->code(env);
+	operand *addr = env->lookup(name);
+	vp.store(val, *addr);
+	return val;
 }
 
 operand cond_class::code(CgenEnvironment *env) 
@@ -841,7 +845,25 @@ operand cond_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "cond" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	ValuePrinter vp(*(env->cur_stream));
+	operand cond = pred->code(env);
+	// create labels for true, false and end
+	// pay attention to the block_count suffix
+	string label_true = env->new_label("true", true);
+	string label_false = env->new_label("false", false);
+	string label_end = env->new_label("end", false);
+	vp.branch_cond(cond, label_true, label_false);
+
+	vp.begin_block(label_true);
+	operand then_val = then_exp->code(env);
+	vp.branch_uncond(label_end);
+
+	vp.begin_block(label_false);
+	operand else_val = else_exp->code(env);
+	vp.branch_uncond(label_end);
+
+	vp.begin_block(label_end);
+	return vp.select(cond, then_val, else_val);    // ???
 }
 
 operand loop_class::code(CgenEnvironment *env) 
@@ -849,7 +871,23 @@ operand loop_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "loop" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	return operand();
+	ValuePrinter vp(*(env->cur_stream));
+	string label_loop = env->new_label("loop", true);
+	string label_body = env->new_label("body", false);
+	string label_end = env->new_label("out", false);
+	// control flow goes to a new basic block !!!
+	vp.branch_uncond(label_loop);
+    // basic block for loop pred
+	vp.begin_block(label_loop);
+	operand cond = pred->code(env);
+	vp.branch_cond(cond, label_body, label_end);
+    // basic block for loop body
+	vp.begin_block(label_body);
+	operand val = body->code(env);
+	vp.branch_uncond(label_loop);
+    // new basic block after loop
+	vp.begin_block(label_end);
+	return val;
 } 
 
 operand block_class::code(CgenEnvironment *env) 
