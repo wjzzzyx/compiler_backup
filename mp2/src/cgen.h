@@ -173,6 +173,7 @@ private:
 	int block_count;
 	int tmp_count;
 	int ok_count;
+	int suff_count;
 
 	// ADD CODE HERE
 	CgenNode *cur_class;
@@ -184,7 +185,7 @@ public:
 	// fresh name generation functions
 	string new_name();
 	string new_ok_label();
-	const string new_label(const std::string& prefix, bool increment);
+	const string new_label(const std::string& prefix, bool block_inc, bool suffix_inc);
 
 	// Used in provided code for the (case..of) construct
 	string next_label;

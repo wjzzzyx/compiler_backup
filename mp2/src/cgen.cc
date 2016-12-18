@@ -578,16 +578,16 @@ void CgenClassTable::code_main()
 	
 	string msg("Main_main() returned %d\n");
 	op_arr_type fmt_type(INT8, msg.length() + 1);
-	const_value fmt(fmt_type, msg, true);
-
-	vp.init_constant(".str", fmt);
+	const_value fmt(fmt_type, msg, false);
+	vp.init_constant(".str", fmt);    // emit code for string constant
+    // format string pointer type
 	op_arr_type fmt_addr_type(INT8_PTR, msg.length() + 1);
 	global_value fmt_addr(fmt_addr_type, ".str", fmt);
 
     op_type i32_type(INT32);    // return value type
 	vector<op_type> main_null_argtypes;
 	vector<operand> main_null_args;
-	vp.define(*ct_stream, i32_type, "main", main_null_args);
+	vp.define(i32_type, "main", main_null_args);
 	// Define an entry basic block
     vp.begin_block("entry");
 	// Call Main_main(). This returns int* for phase 1, Object for phase 2
@@ -703,7 +703,8 @@ void CgenNode::codeGenMainmain(ostream &out)
 	// -- invoke mainMethod->code(env) to translate the method
 	CgenEnvironment env(out, this);
 	vector<operand> main_args;
-	vp.define(INT32, "Main_main", main_args);    // emit IR for function "define"
+	op_type i32_type(INT32);
+	vp.define(i32_type, "Main_main", main_args);    // emit IR for function "define"   INT32???
 	vp.begin_block("entry");    // emit IR for "entry:"
     mainMethod->code(&env);    // emit IR for function body
 	vp.end_define();
@@ -725,7 +726,7 @@ CgenEnvironment::CgenEnvironment(std::ostream &o, CgenNode *c)
 	cur_class = c;
 	cur_stream = &o;
 	var_table.enterscope();
-	tmp_count = block_count = ok_count = 0;
+	tmp_count = block_count = ok_count = suff_count = 0;
 	// ADD CODE HERE
 }
 
@@ -749,9 +750,10 @@ std::string CgenEnvironment::new_ok_label() {
 	return "ok." + s.str();
 }
 const std::string CgenEnvironment::new_label(const std::string& prefix,
-		bool increment) {
-	block_count += increment;    //*
-	std::string suffix = itos(block_count);
+		bool block_inc, bool suffix_inc) {
+	std::string suffix = itos(suff_count);
+	block_count += block_inc;
+    suff_count += suffix_inc;
 	return prefix + suffix;
 }
 
@@ -814,13 +816,12 @@ void method_class::code(CgenEnvironment *env)
     ValuePrinter vp(*(env->cur_stream));
 	operand retval = expr->code(env);    // emit code for the expression **
 	vp.ret(retval);    // emit "ret" instruction
-	//???
+
 	//Setup the abort call at the end of each method **
     vp.begin_block("abort");
     vector<op_type> abort_args_types;
     vector<operand> abort_args;
-    operand ab_call = vp.call(abort_args_types, VOID, 
-                  "abort", true, abort_args);
+    operand ab_call = vp.call(abort_args_types, VOID, "abort", true, abort_args);
     vp.unreachable();
 }
 
@@ -848,22 +849,32 @@ operand cond_class::code(CgenEnvironment *env)
 	ValuePrinter vp(*(env->cur_stream));
 	operand cond = pred->code(env);
 	// create labels for true, false and end
-	// pay attention to the block_count suffix
-	string label_true = env->new_label("true", true);
-	string label_false = env->new_label("false", false);
-	string label_end = env->new_label("end", false);
+	// pay attention to the label suffix
+	string label_true = env->new_label("true", true, false);
+	string label_false = env->new_label("false", true, false);
+	string label_end = env->new_label("end", true, true);
+	// get correct return type
+    op_type type;
+	if(then_exp->get_type()->equal_string("Int", 3))
+		type.set_type(INT32);
+	else
+		type.set_type(INT1);
+	// alloca memory for return value
+	operand valaddr = vp.alloca_mem(type);
 	vp.branch_cond(cond, label_true, label_false);
 
 	vp.begin_block(label_true);
 	operand then_val = then_exp->code(env);
+	vp.store(then_val, valaddr);
 	vp.branch_uncond(label_end);
 
 	vp.begin_block(label_false);
 	operand else_val = else_exp->code(env);
+	vp.store(else_val, valaddr);
 	vp.branch_uncond(label_end);
 
 	vp.begin_block(label_end);
-	return vp.select(cond, then_val, else_val);    // ???
+	return vp.load(type, valaddr);
 }
 
 operand loop_class::code(CgenEnvironment *env) 
@@ -872,9 +883,9 @@ operand loop_class::code(CgenEnvironment *env)
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
 	ValuePrinter vp(*(env->cur_stream));
-	string label_loop = env->new_label("loop", true);
-	string label_body = env->new_label("body", false);
-	string label_end = env->new_label("out", false);
+	string label_loop = env->new_label("loop", true, false);
+	string label_body = env->new_label("body", false, false);
+	string label_end = env->new_label("out", false, true);
 	// control flow goes to a new basic block !!!
 	vp.branch_uncond(label_loop);
     // basic block for loop pred
@@ -1052,7 +1063,7 @@ operand int_const_class::code(CgenEnvironment *env)
 	if (cgen_debug) std::cerr << "Integer Constant" << endl;
 	// ADD CODE HERE AND REPLACE "return operand()" WITH SOMETHING 
 	// MORE MEANINGFUL
-	int_value i(atoi(token->get_string()));    // what's the relation between int_value and int_const_class ?
+	int_value i(atoi(token->get_string()));
     
 	return i;
 }
