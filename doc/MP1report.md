@@ -68,8 +68,8 @@
 因此要根据不同的产生式为这三种形式的dispatch表达式生成树结点。其中第一种是普通的对象方法调用;第二种等价于`self.<id>(<expr>, ..., <expr>)`，因此要先将“self”加到idtable中，然后将得到的Symbol作为参数传递给相应的构造函数；第三种是static dispatch，通过这种方式可以指定调用基类中被覆盖的方法，它的构造函数也与前两种不同。
 　　在COOL语言中，let语句中可以定义多个变量，但在语法分析的过程中，将let语句分层处理，每一层中只处理一个变量定义。这样，可以用如下的四个产生式来刻画let语句
 ```
-let_exp		: OBJECTID ':' TYPEID let_init IN expression
-			| OBJECTID ':' TYPEID let_init ',' let_exp
+let_exp	 : OBJECTID ':' TYPEID let_init IN expression
+            | OBJECTID ':' TYPEID let_init ',' let_exp
 			| LET OBJECTID ':' TYPEID let_init IN expression
 			| LET OBJECTID ':' TYPEID let_init ',' let_exp
 ```
@@ -96,4 +96,126 @@ let_exp		: OBJECTID ':' TYPEID let_init IN expression
 ```
 目前实现的分析器中还存在18个移进-归约冲突，它们是let表达式和其他表达式之间的冲突。这是由于按照COOL语法，let语句末尾的表达式可以任意长而导致的。而bison的默认处理方式是移进，因此能够正确处理这种冲突。
 
-#####3、错误恢复（未完待续）
+#####3、错误恢复
+这部分的基础要求是
+>如果在一个class定义中遇到错误，这个类定义应能被正确终止，并且你的parser要能够继续解析下一个类定义（如果有）。
+>类似地，你的parser要能从feature、let语句、{...}中的表达式中发生的错误中恢复，并跳到下一个对应层次的语法结构继续解析。
+
+* 我认为在本实验中，class的错误处理是较难的一个，尤其是当class末尾的分号缺失时的请况下，难以判断当前class是否分析结束。因此我用了两种标志：若分号存在则以分号作为当前class的分析结束标志，否则以下一个class的开始符号‘CLASS’作为当前class的结束标志。第二种方式会把下一个类的CLASS终结符“吞掉”，因此在错误处理动作中需要将CLASS终结符重新写会yychar中。这样，parser就会以CLASS为下一个输入的token继续分析。
+```
+/* Error recovery */
+			| CLASS error ';'
+				{ $$ = NULL; }
+			| CLASS error '{' feature_list '}' ';'
+				{ $$ = NULL; }
+			| CLASS error CLASS
+				{ $$ = NULL; yychar = CLASS; }
+			| CLASS error '{' feature_list '}' CLASS
+				{ $$ = NULL; yychar = CLASS; }
+```
+为了实现力度更细的错误检测，我还把class中的错误分成两种：class本身定义的错误和class内feature的错误，后一种错误交给下层分析。
+* 在分析feature时，对于简单的attribute定义，如果其中出现了错误，则将整个attribute归约为一个error。对于method定义，如果它的错误出现在参数列表中或method内的表达式中，则交给下层处理，而当它的语法错误确实是method这一层时，将整个method归约为一个error。
+```
+			| error ';'
+				{
+					$$ = NULL;
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Error in feature\n");
+				}
+```
+此外，我还专门检测了feature末尾分号丢失的错误类型。
+* 方法参数的错误恢复是在formal_list这一层实现的，如果一个formal出现了语法错误，则将它归约为一个error。注意此时的结束标志可以是formal_list内的分割符‘，’，也可以是整个formal_list结束的标志‘）’。如果是后者，则还要将‘）’重新写入yychar中，以免影响后面的分析。
+```
+/* error recovery */
+			| error ','
+				{ $$ = NULL; yychar = ','; }
+			| error ')'
+				{ $$ = NULL; yychar = ')'; }
+			| formal_list ',' error ','
+				{ $$ = NULL; yychar = ','; }
+			| formal_list ',' error ')'
+				{ $$ = NULL; yychar = ')'; }
+```
+* 表达式中的错误恢复比较复杂，由于我在定义非终结符与产生式时就将一些复杂的表达式单独列出处理，因此也可以对这些表达式进行分类的错误处理。
+ - 方法调用中的形参列表exp_list的错误恢复与formal_list十分类析，即如果list其中一个expression出错，将它归约为一个error。同样以分隔符‘，’或形参末的‘）’作为结束标志。
+```
+/* error recovery */
+			| expression error
+				{
+					$$ = NULL;
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after expression in block\n");
+				}
+			| exp_block expression error
+				{
+					$$ = NULL;
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after expression in block\n");
+				}
+			| error ';'
+				{ $$ = NULL; }
+			| exp_block error ';'
+				{ $$ = NULL; }
+```
+ - 如果在块表达式中，某个expression出错，则将它归约为一个error。由于块表达式中每个表达式都应以‘；’结尾，因此可以以‘；’作为结束标志。
+```
+/* error recovery */
+			| expression error
+				{
+					$$ = NULL;
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after expression in block\n");
+				}
+			| exp_block expression error
+				{
+					$$ = NULL;
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing semicolon after expression in block\n");
+				}
+			| error ';'
+				{ $$ = NULL; }
+			| exp_block error ';'
+				{ $$ = NULL; }
+```
+ - 对于let表达式，如果中间变量定义部分出现语法错误，则将中间部分归约为一个error，并以表达式最后的expression作为结束标志。该expression中如果也出现了语法错误，则递归地通过对expression的错误处理来处理。
+```
+/* error recovery */
+			| LET error expression
+				{ $$ = NULL; }
+```
+ - 对于case表达式，实现了两种力度的检测：如果某个branch出错，将其归约为一个error，以‘；‘作为结束标志。在整个case表达式的层级，如果出错，将整个表达式中间部分归约为一个error，以ESAC作为结束标志。
+```
+/* error recovery */
+			| CASE error ESAC
+				{ $$ = NULL; }
+```
+```
+/* error recovery */
+			| error ';'
+				{ $$ = NULL; }
+```
+ - 此外，我还对条件表达式和循环表达式作了简单的错误检测，但要求这两个表达式末尾的结束符FI和POOL不能缺失。
+```
+/* error recovery */
+			| IF error FI
+				{
+					$$ = NULL;
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Error in if expression\n");
+				}
+			| IF expression THEN expression ELSE expression error
+				{
+					$$ = NULL;
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Missing fi after if expression\n");
+				}
+```
+```
+/* error recovery */
+			| WHILE error POOL
+				{
+					$$ = NULL;
+					if(VERBOSE_ERRORS)
+						fprintf(stderr, "Error in while expression\n");
+				}
+```
